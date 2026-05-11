@@ -93,8 +93,8 @@ ROI_PLAYER_CARD=120,140,650,160
   - `python -m players_search step club_tab` (только открывает вкладку **Клуб**)
   - `python -m players_search step search_club --club-tag "#2Q2CQYPC8"` (выполнит `club_tab` + `search_club`)
   - `python -m players_search step open_first --club-tag "#2Q2CQYPC8"` (выполнит `club_tab` + `search_club` + `open_first`)
-  - `python -m players_search step find_player --club-tag "#2Q2CQYPC8" --player-name "Nickname"` (выполнит поиск игрока в списке участников: OCR текущего фрагмента + прокрутка вниз до нахождения ника)
-  - `python -m players_search step home --club-tag "#2Q2CQYPC8" --player-name "Nickname"`
+  - `python -m players_search step find_player --club-tag "#2Q2CQYPC8" --player-name "SuperTara88"`
+  - `python -m players_search step home --club-tag "#2Q2CQYPC8" --player-name "SuperTara88"`
 - Проверка OCR-поиска элемента по тексту (сохранит скриншот и скриншот с рамкой):
   - `python -m players_search probe-text --text "Клуб"`
   - `python -m players_search probe-text --text "Клуб" --click`

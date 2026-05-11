@@ -4,6 +4,7 @@ import time
 from typing import Optional, Tuple
 
 import pyautogui
+import pyperclip
 from PIL import Image
 
 from players_search.ocr import extract_supercell_id, find_token_bbox, image_to_text, image_to_words
@@ -109,10 +110,20 @@ class EmulatorUI:
         t = self._sanitize_input(text)
         pyautogui.hotkey("ctrl", "a")
         pyautogui.press("backspace")
-        # Clipboard paste can be unreliable in some emulators; use direct typing.
-        # To prevent '#' -> '№' on RU layouts, switch to EN via OS hotkey first.
-        self._switch_layout()
-        pyautogui.typewrite(t, interval=0.02)
+        if not t:
+            self._sleep()
+            return
+
+        # Prefer clipboard paste: it preserves '#' on non-English keyboard layouts
+        # and is faster/more reliable for Supercell club tags in emulator text fields.
+        try:
+            pyperclip.copy(t)
+            pyautogui.hotkey("ctrl", "v")
+        except Exception:  # noqa: BLE001
+            # Fallback to direct typing. Switch to EN first to avoid '#' -> '№'
+            # on RU layouts when clipboard access is unavailable.
+            self._switch_layout()
+            pyautogui.typewrite(t, interval=0.02)
         self._sleep()
 
     def _submit_search(self) -> None:
@@ -204,10 +215,13 @@ class EmulatorUI:
         self.open_club_tab()
         self.focus_club_search_box()
 
-    def search_club_by_tag(self, club_tag: str) -> None:
-        self.open_club_search()
+    def input_club_tag_and_submit(self, club_tag: str) -> None:
         self._clear_and_input(club_tag)
         self._submit_search()
+
+    def search_club_by_tag(self, club_tag: str) -> None:
+        self.open_club_search()
+        self.input_club_tag_and_submit(club_tag)
 
     def open_first_club_result(self) -> None:
         if self.template_first_result and self.click_template(self.template_first_result, min_score=0.82):

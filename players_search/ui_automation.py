@@ -221,14 +221,22 @@ class EmulatorUI:
             self._sleep()
             return
 
-        # Prefer clipboard paste: it preserves '#' on non-English keyboard layouts
-        # and is faster/more reliable for Supercell club tags in emulator text fields.
+        # Paste from the host clipboard first: it preserves '#' regardless of
+        # the active keyboard layout. Use explicit keyDown/press/keyUp instead
+        # of a single hotkey call because some emulators miss very short Ctrl+V
+        # chords right after the clipboard is updated.
         try:
             pyperclip.copy(t)
-            pyautogui.hotkey("ctrl", "v")
+            time.sleep(max(0.05, self.ui_sleep / 3))
+            self._ensure_emulator_active()
+            pyautogui.keyDown("ctrl")
+            try:
+                pyautogui.press("v")
+            finally:
+                pyautogui.keyUp("ctrl")
         except Exception:  # noqa: BLE001
-            # Fallback to direct typing. Switch to EN first to avoid '#' -> '№'
-            # on RU layouts when clipboard access is unavailable.
+            # Last-resort fallback for environments where clipboard access is
+            # unavailable. Switch layout first to avoid '#' becoming '№'.
             self._switch_layout()
             pyautogui.typewrite(t, interval=0.02)
         self._sleep()

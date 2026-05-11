@@ -42,6 +42,12 @@ user32.SetForegroundWindow.restype = wintypes.BOOL
 user32.GetForegroundWindow.argtypes = ()
 user32.GetForegroundWindow.restype = wintypes.HWND
 
+user32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
+user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+
+user32.GetKeyboardLayout.argtypes = (wintypes.DWORD,)
+user32.GetKeyboardLayout.restype = wintypes.HKL
+
 user32.IsIconic.argtypes = (wintypes.HWND,)
 user32.IsIconic.restype = wintypes.BOOL
 
@@ -152,6 +158,23 @@ class WindowTarget:
         if not ok:
             raise RuntimeError("GetWindowRect failed")
         return WindowRect(left=int(r.left), top=int(r.top), right=int(r.right), bottom=int(r.bottom))
+
+    def input_language_id(self) -> Optional[int]:
+        """Return the target window keyboard layout language id, e.g. 0x0409 for EN-US.
+
+        This only reads the current HKL for the target window thread. It does
+        not send messages to the emulator, so it is safe for emulator builds
+        that freeze on WM_INPUTLANGCHANGEREQUEST.
+        """
+        hwnd = self._resolve_hwnd()
+        pid = wintypes.DWORD()
+        thread_id = user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if not thread_id:
+            return None
+        hkl = user32.GetKeyboardLayout(thread_id)
+        if not hkl:
+            return None
+        return int(hkl) & 0xFFFF
 
     def request_input_language(self, klid: str) -> bool:
         """

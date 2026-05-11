@@ -212,15 +212,13 @@ class EmulatorUI:
         except Exception:  # noqa: BLE001
             pass
 
-    def _request_english_input(self) -> None:
-        """Best-effort switch of the target window to EN before direct typing."""
-        self._ensure_emulator_active()
-        try:
-            if self.window.request_input_language("00000409"):
-                time.sleep(max(0.05, self.ui_sleep / 3))
-                return
-        except Exception:  # noqa: BLE001
-            pass
+    def _prepare_keyboard_layout(self) -> None:
+        """Best-effort host layout switch before direct typing.
+
+        Do not send WM_INPUTLANGCHANGEREQUEST directly to the emulator window:
+        some emulator builds freeze on that message. The configured OS hotkey is
+        less precise, but it behaves like a user action and avoids the hang.
+        """
         self._switch_layout()
 
     def _paste_from_clipboard(self, text: str) -> None:
@@ -242,11 +240,11 @@ class EmulatorUI:
 
         # Clipboard paste is unreliable in several Android emulator/game text
         # fields: Ctrl+V can be accepted but insert an empty value. For the club
-        # search field, direct typing is the stable path as long as the host
-        # layout is forced to English first so '#' does not become '№'. Keep
-        # clipboard paste as a fallback for environments where synthetic typing
-        # fails.
-        self._request_english_input()
+        # search field, direct typing is the stable path. Prepare layout only via
+        # a user-like hotkey; direct WinAPI layout requests can freeze emulators.
+        # Keep clipboard paste as a fallback for environments where synthetic
+        # typing fails.
+        self._prepare_keyboard_layout()
         try:
             pyautogui.typewrite(t, interval=0.03)
         except Exception:  # noqa: BLE001

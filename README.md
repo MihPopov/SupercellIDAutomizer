@@ -93,7 +93,7 @@ ROI_PLAYER_CARD=120,140,650,160
   - `python -m players_search step club_tab` (только открывает вкладку **Клуб**)
   - `python -m players_search step search_club --club-tag "#2Q2CQYPC8"` (выполнит `club_tab` + `search_club`)
   - `python -m players_search step open_first --club-tag "#2Q2CQYPC8"` (выполнит `club_tab` + `search_club` + `open_first`)
-  - `python -m players_search step find_player --club-tag "#2Q2CQYPC8" --player-name "Nickname"`
+  - `python -m players_search step find_player --club-tag "#2Q2CQYPC8" --player-name "Nickname"` (выполнит поиск игрока в списке участников: OCR текущего фрагмента + прокрутка вниз до нахождения ника)
   - `python -m players_search step home --club-tag "#2Q2CQYPC8" --player-name "Nickname"`
 - Проверка OCR-поиска элемента по тексту (сохранит скриншот и скриншот с рамкой):
   - `python -m players_search probe-text --text "Клуб"`
@@ -111,7 +111,8 @@ ROI_PLAYER_CARD=120,140,650,160
 Почему всё равно могут понадобиться координаты:
 - OCR по “кнопкам” в Brawl Stars иногда нестабилен из-за шрифтов/анимаций. Поэтому сейчас реализовано: **сначала OCR-попытка**, затем **fallback на координаты**.
 - Для стилизованных кнопок (например “КЛУБ”) лучше работает template matching по PNG-шаблону: задайте `TEMPLATE_CLUB_TAB` и положите файл (например) в `templates\\club.png`.
+- Поиск игрока на шаге `find_player` читает только область `ROI_MEMBER_LIST`, группирует OCR-слова по строкам, сравнивает их с `--player-name` и прокручивает список вниз жестом внутри этой области, пока ник не найден или не достигнут лимит попыток.
 
 Про ввод `club_tag`:
-- Ввод делается прямым набором. Перед набором скрипт нажимает `LAYOUT_SWITCH_HOTKEY`, чтобы перейти на EN-раскладку и избежать `#` → `№`.
-- После вставки скрипт нажимает Enter (закрыть клавиатуру), затем нажимает кнопку поиска по шаблону `TEMPLATE_SEARCH_BUTTON` (если задано). Если шаблон не задан/не найден — пробует OCR `Искать`/`Search`, иначе жмёт Enter ещё раз.
+- Ввод делается через буфер обмена (`Ctrl+V`): скрипт копирует `club_tag` в clipboard и вставляет его в поле поиска, чтобы символ `#` не превращался в `№` на RU-раскладке. Если clipboard недоступен, используется fallback на прямой набор с предварительным `LAYOUT_SWITCH_HOTKEY`.
+- После ввода скрипт нажимает Enter (закрыть клавиатуру), затем нажимает кнопку поиска по шаблону `TEMPLATE_SEARCH_BUTTON` (если задано). Если шаблон не задан/не найден — пробует OCR `Искать`/`Search`, иначе жмёт Enter ещё раз.

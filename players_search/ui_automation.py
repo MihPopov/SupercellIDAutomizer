@@ -213,13 +213,35 @@ class EmulatorUI:
             pass
 
     def _prepare_keyboard_layout(self) -> None:
-        """Best-effort host layout switch before direct typing.
+        """Switch to EN only when the target window is known to use another layout.
 
-        Do not send WM_INPUTLANGCHANGEREQUEST directly to the emulator window:
-        some emulator builds freeze on that message. The configured OS hotkey is
-        less precise, but it behaves like a user action and avoids the hang.
+        This avoids blindly toggling EN -> RU when the user already has the
+        correct layout. It only reads the target window layout; it never sends
+        WM_INPUTLANGCHANGEREQUEST because that can freeze some emulators.
         """
+        try:
+            lang_id = self.window.input_language_id()
+        except Exception:  # noqa: BLE001
+            lang_id = None
+        if lang_id == 0x0409:
+            return
+        if lang_id is None:
+            # Unknown layout: do not blindly toggle and risk changing EN to RU.
+            return
         self._switch_layout()
+
+    def _type_club_tag_direct(self, text: str) -> None:
+        """Type a Supercell tag via physical keys after EN layout preparation."""
+        for ch in text:
+            if ch == "#":
+                pyautogui.hotkey("shift", "3")
+            elif ch.isascii() and ch.isalpha():
+                pyautogui.press(ch.lower())
+            elif ch.isdigit():
+                pyautogui.press(ch)
+            else:
+                pyautogui.typewrite(ch, interval=0.03)
+            time.sleep(0.03)
 
     def _paste_from_clipboard(self, text: str) -> None:
         pyperclip.copy(text)
@@ -240,13 +262,14 @@ class EmulatorUI:
 
         # Clipboard paste is unreliable in several Android emulator/game text
         # fields: Ctrl+V can be accepted but insert an empty value. For the club
-        # search field, direct typing is the stable path. Prepare layout only via
-        # a user-like hotkey; direct WinAPI layout requests can freeze emulators.
+        # search field, direct typing is the stable path. Detect the current
+        # layout before switching so EN is not blindly toggled to RU; then type
+        # the tag as physical keys (# = Shift+3, letters = lowercase keys).
         # Keep clipboard paste as a fallback for environments where synthetic
         # typing fails.
         self._prepare_keyboard_layout()
         try:
-            pyautogui.typewrite(t, interval=0.03)
+            self._type_club_tag_direct(t)
         except Exception:  # noqa: BLE001
             pyautogui.hotkey("ctrl", "a")
             pyautogui.press("backspace")

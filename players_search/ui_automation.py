@@ -1,16 +1,123 @@
 from __future__ import annotations
 
+import re
 import time
-from typing import Optional, Tuple
+from dataclasses import dataclass
+from difflib import SequenceMatcher
+from typing import Iterable, List, Optional, Tuple
 
 import pyautogui
 import pyperclip
 from PIL import Image
 
-from players_search.ocr import extract_supercell_id, find_token_bbox, image_to_text, image_to_words
+from players_search.ocr import extract_supercell_id, image_to_text, image_to_words
 from players_search.win_window import WindowTarget
 from players_search.vision import find_text_bbox
 from players_search.template_match import find_template_best
+
+
+@dataclass(frozen=True)
+class _MemberLine:
+    text: str
+    left: int
+    top: int
+    width: int
+    height: int
+
+    def center(self) -> Tuple[int, int]:
+        return (self.left + self.width // 2, self.top + self.height // 2)
+
+
+@dataclass(frozen=True)
+class _PlayerMatch:
+    line: _MemberLine
+    score: float
+
+
+def _normalize_player_text(text: str) -> str:
+    """Normalize OCR/player names for matching while preserving letters/digits."""
+    return re.sub(r"[^0-9a-zа-яё]+", "", (text or "").casefold())
+
+
+def _best_similarity(needle: str, haystack: str) -> float:
+    if not needle or not haystack:
+        return 0.0
+    if needle in haystack:
+        return 1.0
+    if len(needle) < 4:
+        return 0.0
+    if len(haystack) <= len(needle):
+        return SequenceMatcher(None, needle, haystack).ratio()
+
+    best = 0.0
+    window = len(needle)
+    # Compare with slightly wider windows too, because OCR can merge nickname
+    # text with clan-role/rank text on the same visual line.
+    for extra in range(0, min(4, max(1, len(haystack) - window)) + 1):
+        size = window + extra
+        for start in range(0, len(haystack) - size + 1):
+            best = max(best, SequenceMatcher(None, needle, haystack[start : start + size]).ratio())
+    return best
+
+
+def _group_words_into_lines(words: Iterable[Tuple[str, int, int, int, int]]) -> List[_MemberLine]:
+    rows: List[List[Tuple[str, int, int, int, int]]] = []
+    for word in sorted(words, key=lambda w: (w[2] + w[4] / 2, w[1])):
+        text, left, top, width, height = word
+        if not text.strip() or width <= 0 or height <= 0:
+            continue
+        center_y = top + height / 2
+        if not rows:
+            rows.append([word])
+            continue
+
+        row = rows[-1]
+        row_center = sum(w[2] + w[4] / 2 for w in row) / len(row)
+        row_height = max(w[4] for w in row)
+        threshold = max(12.0, row_height * 0.75, height * 0.75)
+        if abs(center_y - row_center) <= threshold:
+            row.append(word)
+        else:
+            rows.append([word])
+
+    lines: List[_MemberLine] = []
+    for row in rows:
+        row.sort(key=lambda w: w[1])
+        left = min(w[1] for w in row)
+        top = min(w[2] for w in row)
+        right = max(w[1] + w[3] for w in row)
+        bottom = max(w[2] + w[4] for w in row)
+        lines.append(
+            _MemberLine(
+                text=" ".join(w[0] for w in row),
+                left=left,
+                top=top,
+                width=right - left,
+                height=bottom - top,
+            )
+        )
+    return lines
+
+
+def _find_player_match(words: Iterable[Tuple[str, int, int, int, int]], player_name: str) -> Optional[_PlayerMatch]:
+    target = _normalize_player_text(player_name)
+    if not target:
+        return None
+
+    best: Optional[_PlayerMatch] = None
+    for line in _group_words_into_lines(words):
+        candidate = _normalize_player_text(line.text)
+        score = _best_similarity(target, candidate)
+        if score <= 0:
+            continue
+        if best is None or score > best.score:
+            best = _PlayerMatch(line=line, score=score)
+
+    # Require stricter matching for very short names to avoid false clicks.
+    min_score = 1.0 if len(target) < 4 else 0.78
+    if best and best.score >= min_score:
+        return best
+    return None
 
 
 class EmulatorUI:
@@ -186,10 +293,18 @@ class EmulatorUI:
         img = self.screenshot_window()
         return find_template_best(img, template_path=Path(template_path), min_score=min_score)
 
-    def _scroll_member_list(self, clicks: int = -6) -> None:
-        # Negative scrolls down for most mice on Windows in PyAutoGUI.
+    def _scroll_member_list(self) -> None:
+        # Drag inside the member-list ROI so Android emulators treat it as a
+        # touch scroll. This is more reliable than wheel scrolling, and it also
+        # guarantees the scroll starts over the visible list rather than some
+        # arbitrary mouse position.
         self._ensure_emulator_active()
-        pyautogui.scroll(clicks * 120)
+        left, top, width, height = self.window.to_screen_roi(self.roi_member_list)
+        x = left + width // 2
+        start_y = top + int(height * 0.82)
+        end_y = top + int(height * 0.28)
+        pyautogui.moveTo(x, start_y)
+        pyautogui.dragTo(x, end_y, duration=max(0.15, self.ui_sleep / 2), button="left")
         self._sleep()
 
     def go_home(self) -> None:
@@ -228,38 +343,34 @@ class EmulatorUI:
             return
         self._click(self.coord_first_result)
 
-    def find_player_and_get_supercell_id(self, player_name: str, max_scrolls: int = 18) -> Optional[str]:
+    def find_player_and_get_supercell_id(self, player_name: str, max_scrolls: int = 30) -> Optional[str]:
         """
-        Best-effort:
-        - OCR member list area and look for player_name.
-        - When likely found, capture player card ROI and extract Supercell ID token.
+        Finds a player in the club member list and opens their profile.
+
+        The visible member list is scanned with OCR line by line. If the
+        normalized nickname is not present on the current fragment, the list is
+        dragged down and scanned again until the player is found or max_scrolls
+        is reached. After a match, the method clicks the matched visual row and
+        reads the Supercell ID from the opened profile/card ROI.
         """
-        target = player_name.strip().lower()
-        if not target:
+        if not _normalize_player_text(player_name):
             return None
 
-        for _ in range(max_scrolls + 1):
+        for attempt in range(max_scrolls + 1):
             list_img = self._screenshot(self.roi_member_list)
             words = image_to_words(list_img, lang=self.ocr_lang)
-            list_text = " ".join(w[0] for w in words).lower()
-            if target in list_text:
-                # Try clicking exactly on the matched token.
-                # If nickname has spaces, prefer first word match.
-                first_word = target.split()[0]
-                bbox = find_token_bbox(words, first_word)
+            match = _find_player_match(words, player_name)
+            if match:
                 left0, top0, _, _ = self.roi_member_list
-                if bbox:
-                    l, t, w, h = bbox
-                    self._click((left0 + l + w // 2, top0 + t + h // 2))
-                else:
-                    self._click((left0 + 50, top0 + 60))
+                x, y = match.line.center()
+                self._click((left0 + x, top0 + y))
                 self._sleep()
 
                 card_img = self._screenshot(self.roi_player_card)
                 card_text = image_to_text(card_img, lang=self.ocr_lang)
-                scid = extract_supercell_id(card_text)
-                return scid
+                return extract_supercell_id(card_text)
 
-            self._scroll_member_list()
+            if attempt < max_scrolls:
+                self._scroll_member_list()
 
         return None

@@ -150,6 +150,46 @@ def image_to_words_variants(
     return sorted(merged.values(), key=lambda w: (w[2], w[1]))
 
 
+def image_to_text_variants(
+    img: Image.Image,
+    *,
+    lang: str = "eng",
+    scale: int = 3,
+    psms: Tuple[int, ...] = (7, 8, 11),
+    whitelist: Optional[str] = None,
+) -> List[str]:
+    """Return OCR strings from several preprocessors while preserving case."""
+    texts: List[str] = []
+    config_suffix = f" -c tessedit_char_whitelist={whitelist}" if whitelist else ""
+    for pre in preprocess_for_ocr_variants(img, scale=scale):
+        for psm in psms:
+            config = f"--psm {psm}{config_suffix}"
+            try:
+                raw = pytesseract.image_to_string(pre, lang=lang, config=config).strip()
+            except pytesseract.TesseractError:
+                raw = pytesseract.image_to_string(pre, lang="eng", config=config).strip()
+            if raw:
+                texts.append(raw)
+    return texts
+
+
+def extract_case_sensitive_supercell_id(text: str) -> Optional[str]:
+    """Extract the best case-preserving Supercell ID/nameplate token from OCR text."""
+    tokens = re.findall(r"#?[A-Za-z0-9]{3,32}", text or "")
+    filtered = [t for t in tokens if t.casefold() not in {"id", "supercell", "supercellid"}]
+    if not filtered:
+        return None
+
+    # Prefer mixed-case Supercell ID/nameplate values, then #tags, then longest token.
+    mixed = [t for t in filtered if any(c.islower() for c in t) and any(c.isupper() for c in t)]
+    if mixed:
+        return max(mixed, key=len)
+    tags = [t for t in filtered if t.startswith("#")]
+    if tags:
+        return max(tags, key=len)
+    return max(filtered, key=len)
+
+
 def find_token_bbox(words: Iterable[Tuple[str, int, int, int, int]], needle: str) -> Optional[Tuple[int, int, int, int]]:
     """
     Finds a bbox for `needle` (case-insensitive) among OCR tokens.

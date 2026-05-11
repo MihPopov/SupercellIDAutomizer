@@ -6,11 +6,19 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Iterable, List, Optional, Tuple
 
+import cv2
+import numpy as np
 import pyautogui
 import pyperclip
 from PIL import Image
 
-from players_search.ocr import extract_supercell_id, image_to_text, image_to_words, image_to_words_variants
+from players_search.ocr import (
+    extract_case_sensitive_supercell_id,
+    image_to_text,
+    image_to_text_variants,
+    image_to_words,
+    image_to_words_variants,
+)
 from players_search.win_window import WindowTarget
 from players_search.vision import find_text_bbox
 from players_search.template_match import find_template_best
@@ -138,6 +146,7 @@ class EmulatorUI:
         template_search_box: Optional[str],
         template_search_button: Optional[str],
         template_first_result: Optional[str],
+        template_home_button: Optional[str],
         layout_switch_hotkey: str,
         coord_club_tab: Tuple[int, int],
         coord_search_box: Tuple[int, int],
@@ -153,6 +162,7 @@ class EmulatorUI:
         self.template_search_box = template_search_box
         self.template_search_button = template_search_button
         self.template_first_result = template_first_result
+        self.template_home_button = template_home_button
         self.layout_switch_hotkey = layout_switch_hotkey
         self.coord_club_tab = coord_club_tab
         self.coord_search_box = coord_search_box
@@ -351,6 +361,9 @@ class EmulatorUI:
         self._sleep()
 
     def go_home(self) -> None:
+        # Prefer template matching for the Home button, then coordinate fallback.
+        if self.template_home_button and self.click_template(self.template_home_button, min_score=0.82):
+            return
         self._click(self.coord_back_home)
 
     def open_club_tab(self) -> None:
@@ -386,18 +399,15 @@ class EmulatorUI:
             return
         self._click(self.coord_first_result)
 
-    def find_player_and_get_supercell_id(self, player_name: str, max_scrolls: int = 30) -> Optional[str]:
-        """
-        Finds a player in the club member list and opens their profile.
+    def find_player_and_open_profile(self, player_name: str, max_scrolls: int = 30) -> bool:
+        """Find a player in the club member list and open their profile.
 
-        The visible member list is scanned with OCR line by line. If the
-        normalized nickname is not present on the current fragment, the list is
-        dragged down and scanned again until the player is found or max_scrolls
-        is reached. After a match, the method clicks the matched visual row and
-        reads the Supercell ID from the opened profile/card ROI.
+        This is step 4 only: it scans the visible list, scrolls as needed, and
+        clicks the matched member row. Supercell ID extraction is intentionally
+        handled by read_supercell_id_from_profile() as step 5.
         """
         if not _normalize_player_text(player_name):
-            return None
+            return False
 
         for attempt in range(max_scrolls + 1):
             list_img = self._screenshot(self.roi_member_list)
@@ -413,12 +423,66 @@ class EmulatorUI:
                 x, y = match.line.center()
                 self._click((left0 + x, top0 + y))
                 self._sleep()
-
-                card_img = self._screenshot(self.roi_player_card)
-                card_text = image_to_text(card_img, lang=self.ocr_lang)
-                return extract_supercell_id(card_text)
+                return True
 
             if attempt < max_scrolls:
                 self._scroll_member_list()
 
+        return False
+
+    def _crop_supercell_id_box(self, img: Image.Image) -> Image.Image:
+        """Crop the dark Supercell ID/nameplate box near the top-left of ROI_PLAYER_CARD."""
+        arr = np.array(img.convert("RGB"))
+        gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+        mask = (gray < 70).astype("uint8") * 255
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 5))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+        contours, _hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        best: Optional[Tuple[int, int, int, int]] = None
+        best_score = -1.0
+        img_w, img_h = img.size
+        for c in contours:
+            x, y, w, h = cv2.boundingRect(c)
+            if w < 80 or h < 20:
+                continue
+            if y > img_h * 0.65 or x > img_w * 0.75:
+                continue
+            aspect = w / max(1, h)
+            if aspect < 2.0:
+                continue
+            # Prefer large, wide dark boxes closer to the top-left.
+            score = (w * h) - (x * 2.0) - (y * 3.0)
+            if score > best_score:
+                best_score = score
+                best = (x, y, w, h)
+
+        if not best:
+            return img
+
+        x, y, w, h = best
+        pad = 8
+        left = max(0, x - pad)
+        top = max(0, y - pad)
+        right = min(img_w, x + w + pad)
+        bottom = min(img_h, y + h + pad)
+        return img.crop((left, top, right, bottom))
+
+    def read_supercell_id_from_profile(self) -> Optional[str]:
+        """Read the case-sensitive Supercell ID from the profile nameplate."""
+        card_img = self._screenshot(self.roi_player_card)
+        id_img = self._crop_supercell_id_box(card_img)
+        whitelist = "#ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+        texts = image_to_text_variants(id_img, lang="eng", whitelist=whitelist)
+        texts.append(image_to_text(id_img, lang="eng"))
+        for text in texts:
+            scid = extract_case_sensitive_supercell_id(text)
+            if scid:
+                return scid
         return None
+
+    def find_player_and_get_supercell_id(self, player_name: str, max_scrolls: int = 30) -> Optional[str]:
+        """Backward-compatible wrapper: open profile and read Supercell ID."""
+        if not self.find_player_and_open_profile(player_name, max_scrolls=max_scrolls):
+            return None
+        return self.read_supercell_id_from_profile()

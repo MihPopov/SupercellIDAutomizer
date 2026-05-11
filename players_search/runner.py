@@ -33,6 +33,7 @@ def _create_ui(settings: Settings, ui_sleep: float):
         template_search_box=settings.template_search_box,
         template_search_button=settings.template_search_button,
         template_first_result=settings.template_first_result,
+        template_home_button=settings.template_home_button,
         layout_switch_hotkey=settings.layout_switch_hotkey,
         coord_club_tab=settings.coord_club_tab,
         coord_search_box=settings.coord_search_box,
@@ -62,7 +63,13 @@ def run_fill(*, settings: Settings, limit: int, dry_run: bool, ui_sleep: float) 
         try:
             ui.search_club_by_tag(row.club_tag)
             ui.open_first_club_result()
-            scid: Optional[str] = ui.find_player_and_get_supercell_id(row.name)
+            opened = ui.find_player_and_open_profile(row.name)
+            if not opened:
+                ui.go_home()
+                print("  -> Player not found (OCR).")
+                continue
+
+            scid: Optional[str] = ui.read_supercell_id_from_profile()
             ui.go_home()
 
             if not scid:

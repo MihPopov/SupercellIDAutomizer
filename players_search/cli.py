@@ -21,6 +21,7 @@ def _build_ui(*, ui_sleep: float):
         template_search_box=ui_s.template_search_box,
         template_search_button=ui_s.template_search_button,
         template_first_result=ui_s.template_first_result,
+        template_home_button=ui_s.template_home_button,
         layout_switch_hotkey=ui_s.layout_switch_hotkey,
         coord_club_tab=ui_s.coord_club_tab,
         coord_search_box=ui_s.coord_search_box,
@@ -49,7 +50,7 @@ def main() -> int:
     p_windows.add_argument("--limit", type=int, default=50)
 
     p_step = sub.add_parser("step", help="Run steps 1..N for debugging (includes prerequisites)")
-    p_step.add_argument("name", choices=["club_tab", "search_club", "open_first", "find_player", "home"])
+    p_step.add_argument("name", choices=["club_tab", "search_club", "open_first", "find_player", "read_supercell_id", "home"])
     p_step.add_argument("--club-tag", default="")
     p_step.add_argument("--player-name", default="")
     p_step.add_argument("--sleep", type=float, default=0.6)

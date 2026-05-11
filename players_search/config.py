@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import os
 from typing import Optional, Tuple
 
-from dotenv import load_dotenv
+from players_search.env_loader import load_dotenv_file
 
 
 def _env(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -57,7 +57,7 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    load_dotenv()
+    load_dotenv_file()
 
     supabase_url = _env("SUPABASE_URL")
     supabase_key = _env("SUPABASE_SERVICE_ROLE_KEY")
@@ -105,7 +105,7 @@ def load_emulator_window_title() -> str:
     """
     Loads only emulator window title from .env without requiring Supabase keys.
     """
-    load_dotenv()
+    load_dotenv_file()
     return _env("EMULATOR_WINDOW_TITLE", "BlueStacks") or "BlueStacks"
 
 
@@ -131,7 +131,7 @@ def load_ui_settings() -> UISettings:
     """
     Loads only UI/OCR settings from .env without requiring Supabase keys.
     """
-    load_dotenv()
+    load_dotenv_file()
     return UISettings(
         emulator_window_title=load_emulator_window_title(),
         tesseract_cmd=_env("TESSERACT_CMD"),

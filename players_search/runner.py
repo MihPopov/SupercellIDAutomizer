@@ -3,16 +3,13 @@ from __future__ import annotations
 import time
 from typing import Optional
 
-import pyautogui
 
 from players_search.config import Settings
-from players_search.ocr import configure_tesseract
-from players_search.supabase_repo import PlayersInProgressRepo
-from players_search.ui_automation import EmulatorUI
-from players_search.win_window import WindowTarget
 
 
 def run_calibrate(*, interval: float, emulator_window_title: str) -> None:
+    import pyautogui
+    from players_search.win_window import WindowTarget
     print("Move mouse to a target UI element inside the emulator window; press Ctrl+C to stop.")
     print(f"Window title: {emulator_window_title!r}")
     wt = WindowTarget(emulator_window_title)
@@ -27,7 +24,8 @@ def run_calibrate(*, interval: float, emulator_window_title: str) -> None:
         time.sleep(interval)
 
 
-def _create_ui(settings: Settings, ui_sleep: float) -> EmulatorUI:
+def _create_ui(settings: Settings, ui_sleep: float):
+    from players_search.ui_automation import EmulatorUI
     return EmulatorUI(
         emulator_window_title=settings.emulator_window_title,
         ocr_lang=settings.ocr_lang,
@@ -47,6 +45,9 @@ def _create_ui(settings: Settings, ui_sleep: float) -> EmulatorUI:
 
 
 def run_fill(*, settings: Settings, limit: int, dry_run: bool, ui_sleep: float) -> None:
+    from players_search.ocr import configure_tesseract
+    from players_search.supabase_repo import PlayersInProgressRepo
+
     configure_tesseract(settings.tesseract_cmd)
     repo = PlayersInProgressRepo(settings)
     ui = _create_ui(settings, ui_sleep=ui_sleep)

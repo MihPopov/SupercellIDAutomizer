@@ -58,7 +58,10 @@ def run_step(
         elif name == "search_club":
             if not club_tag:
                 raise RuntimeError("--club-tag is required for step>=search_club")
-            ui.search_club_by_tag(club_tag)
+            # The prerequisite step already opened the Club tab. Focus only the
+            # search field here so the tab is not clicked twice before typing.
+            ui.focus_club_search_box()
+            ui.input_club_tag_and_submit(club_tag)
         elif name == "open_first":
             ui.open_first_club_result()
         elif name == "find_player":

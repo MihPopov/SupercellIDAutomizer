@@ -10,7 +10,7 @@ import pyautogui
 import pyperclip
 from PIL import Image
 
-from players_search.ocr import extract_supercell_id, image_to_text, image_to_words
+from players_search.ocr import extract_supercell_id, image_to_text, image_to_words, image_to_words_variants
 from players_search.win_window import WindowTarget
 from players_search.vision import find_text_bbox
 from players_search.template_match import find_template_best
@@ -222,18 +222,15 @@ class EmulatorUI:
             return
 
         # Paste from the host clipboard first: it preserves '#' regardless of
-        # the active keyboard layout. Use explicit keyDown/press/keyUp instead
-        # of a single hotkey call because some emulators miss very short Ctrl+V
-        # chords right after the clipboard is updated.
+        # the active keyboard layout. Re-focus and pause after updating the
+        # clipboard so emulators have time to see the new value before Ctrl+V.
         try:
             pyperclip.copy(t)
-            time.sleep(max(0.05, self.ui_sleep / 3))
+            if pyperclip.paste() != t:
+                raise RuntimeError("clipboard did not accept club tag")
+            time.sleep(max(0.12, self.ui_sleep / 2))
             self._ensure_emulator_active()
-            pyautogui.keyDown("ctrl")
-            try:
-                pyautogui.press("v")
-            finally:
-                pyautogui.keyUp("ctrl")
+            pyautogui.hotkey("ctrl", "v", interval=0.05)
         except Exception:  # noqa: BLE001
             # Last-resort fallback for environments where clipboard access is
             # unavailable. Switch layout first to avoid '#' becoming '№'.
@@ -366,8 +363,13 @@ class EmulatorUI:
 
         for attempt in range(max_scrolls + 1):
             list_img = self._screenshot(self.roi_member_list)
+            # First pass is fast; if it misses the nickname, run high-recall OCR
+            # variants before scrolling away from the currently visible list.
             words = image_to_words(list_img, lang=self.ocr_lang)
             match = _find_player_match(words, player_name)
+            if not match:
+                words = image_to_words_variants(list_img, lang=self.ocr_lang)
+                match = _find_player_match(words, player_name)
             if match:
                 left0, top0, _, _ = self.roi_member_list
                 x, y = match.line.center()

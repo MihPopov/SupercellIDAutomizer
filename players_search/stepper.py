@@ -20,6 +20,7 @@ def _ui(emulator_window_title: str, ui_sleep: float) -> EmulatorUI:
         template_search_box=s.template_search_box,
         template_search_button=s.template_search_button,
         template_first_result=s.template_first_result,
+        template_home_button=s.template_home_button,
         layout_switch_hotkey=s.layout_switch_hotkey,
         coord_club_tab=s.coord_club_tab,
         coord_search_box=s.coord_search_box,
@@ -30,7 +31,7 @@ def _ui(emulator_window_title: str, ui_sleep: float) -> EmulatorUI:
         ui_sleep=ui_sleep,
     )
 
-_PIPELINE: List[str] = ["club_tab", "search_club", "open_first", "find_player", "home"]
+_PIPELINE: List[str] = ["club_tab", "search_club", "open_first", "find_player", "read_supercell_id", "home"]
 
 
 def run_step(
@@ -58,14 +59,22 @@ def run_step(
         elif name == "search_club":
             if not club_tag:
                 raise RuntimeError("--club-tag is required for step>=search_club")
-            ui.search_club_by_tag(club_tag)
+            # The prerequisite step already opened the Club tab. Focus only the
+            # search field here so the tab is not clicked twice before typing.
+            ui.focus_club_search_box()
+            ui.input_club_tag_and_submit(club_tag)
         elif name == "open_first":
             ui.open_first_club_result()
         elif name == "find_player":
             if not player_name:
                 raise RuntimeError("--player-name is required for step>=find_player")
-            scid = ui.find_player_and_get_supercell_id(player_name)
-            print(scid or "")
+            opened = ui.find_player_and_open_profile(player_name)
+            if i == target_index:
+                print("opened" if opened else "")
+        elif name == "read_supercell_id":
+            scid = ui.read_supercell_id_from_profile()
+            if i == target_index:
+                print(scid or "")
         elif name == "home":
             ui.go_home()
         else:

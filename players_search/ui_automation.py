@@ -212,6 +212,25 @@ class EmulatorUI:
         except Exception:  # noqa: BLE001
             pass
 
+    def _request_english_input(self) -> None:
+        """Best-effort switch of the target window to EN before direct typing."""
+        self._ensure_emulator_active()
+        try:
+            if self.window.request_input_language("00000409"):
+                time.sleep(max(0.05, self.ui_sleep / 3))
+                return
+        except Exception:  # noqa: BLE001
+            pass
+        self._switch_layout()
+
+    def _paste_from_clipboard(self, text: str) -> None:
+        pyperclip.copy(text)
+        if pyperclip.paste() != text:
+            raise RuntimeError("clipboard did not accept club tag")
+        time.sleep(max(0.12, self.ui_sleep / 2))
+        self._ensure_emulator_active()
+        pyautogui.hotkey("ctrl", "v", interval=0.05)
+
     def _clear_and_input(self, text: str) -> None:
         self._ensure_emulator_active()
         t = self._sanitize_input(text)
@@ -221,21 +240,19 @@ class EmulatorUI:
             self._sleep()
             return
 
-        # Paste from the host clipboard first: it preserves '#' regardless of
-        # the active keyboard layout. Re-focus and pause after updating the
-        # clipboard so emulators have time to see the new value before Ctrl+V.
+        # Clipboard paste is unreliable in several Android emulator/game text
+        # fields: Ctrl+V can be accepted but insert an empty value. For the club
+        # search field, direct typing is the stable path as long as the host
+        # layout is forced to English first so '#' does not become '№'. Keep
+        # clipboard paste as a fallback for environments where synthetic typing
+        # fails.
+        self._request_english_input()
         try:
-            pyperclip.copy(t)
-            if pyperclip.paste() != t:
-                raise RuntimeError("clipboard did not accept club tag")
-            time.sleep(max(0.12, self.ui_sleep / 2))
-            self._ensure_emulator_active()
-            pyautogui.hotkey("ctrl", "v", interval=0.05)
+            pyautogui.typewrite(t, interval=0.03)
         except Exception:  # noqa: BLE001
-            # Last-resort fallback for environments where clipboard access is
-            # unavailable. Switch layout first to avoid '#' becoming '№'.
-            self._switch_layout()
-            pyautogui.typewrite(t, interval=0.02)
+            pyautogui.hotkey("ctrl", "a")
+            pyautogui.press("backspace")
+            self._paste_from_clipboard(t)
         self._sleep()
 
     def _submit_search(self) -> None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import pytesseract
 import cv2
@@ -32,6 +32,33 @@ def preprocess_for_ocr(img: Image.Image, *, scale: int = 2) -> Image.Image:
     gray = cv2.bilateralFilter(gray, 7, 50, 50)
     thr = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 31, 5)
     return Image.fromarray(thr)
+
+
+def preprocess_for_ocr_variants(img: Image.Image, *, scale: int = 2) -> List[Image.Image]:
+    """Build several OCR inputs for noisy/stylized game UI text.
+
+    Brawl Stars member-list text can be colored, outlined, or placed over
+    gradients. A single thresholding strategy can miss a visible nickname, so
+    callers that need higher recall can OCR all variants and merge results.
+    """
+    arr = np.array(img.convert("RGB"))
+    arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+    if scale and scale != 1:
+        arr = cv2.resize(arr, (arr.shape[1] * scale, arr.shape[0] * scale), interpolation=cv2.INTER_CUBIC)
+
+    gray = cv2.cvtColor(arr, cv2.COLOR_BGR2GRAY)
+    norm = cv2.equalizeHist(gray)
+    denoised = cv2.bilateralFilter(norm, 7, 50, 50)
+    adaptive = cv2.adaptiveThreshold(denoised, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 31, 5)
+    _otsu_level, otsu = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    inverted = cv2.bitwise_not(otsu)
+
+    return [
+        Image.fromarray(denoised),
+        Image.fromarray(adaptive),
+        Image.fromarray(otsu),
+        Image.fromarray(inverted),
+    ]
 
 
 def image_to_text(img: Image.Image, *, lang: str = "rus+eng", scale: int = 2) -> str:
@@ -73,6 +100,54 @@ def image_to_words(
             h //= scale
         out.append((text, l, t, w, h))
     return out
+
+
+def image_to_words_variants(
+    img: Image.Image,
+    *,
+    lang: str = "rus+eng",
+    scale: int = 2,
+    psms: Tuple[int, ...] = (6, 11),
+) -> List[Tuple[str, int, int, int, int]]:
+    """OCR words using multiple preprocessors/PSM modes and dedupe boxes."""
+    merged: Dict[Tuple[str, int, int, int, int], Tuple[str, int, int, int, int]] = {}
+    variants = preprocess_for_ocr_variants(img, scale=scale)
+    for pre in variants:
+        for psm in psms:
+            try:
+                data = pytesseract.image_to_data(
+                    pre,
+                    lang=lang,
+                    config=f"--psm {psm}",
+                    output_type=pytesseract.Output.DICT,
+                )
+            except pytesseract.TesseractError:
+                data = pytesseract.image_to_data(
+                    pre,
+                    lang="eng",
+                    config=f"--psm {psm}",
+                    output_type=pytesseract.Output.DICT,
+                )
+            for i in range(len(data.get("text", []))):
+                text = (data["text"][i] or "").strip()
+                if not text:
+                    continue
+                l = int(data["left"][i])
+                t = int(data["top"][i])
+                w = int(data["width"][i])
+                h = int(data["height"][i])
+                if scale and scale != 1:
+                    l //= scale
+                    t //= scale
+                    w //= scale
+                    h //= scale
+                if w <= 0 or h <= 0:
+                    continue
+                # Quantize the box to avoid returning the same OCR token many
+                # times when two preprocessors produce near-identical results.
+                key = (text.casefold(), l // 4, t // 4, w // 4, h // 4)
+                merged[key] = (text, l, t, w, h)
+    return sorted(merged.values(), key=lambda w: (w[2], w[1]))
 
 
 def find_token_bbox(words: Iterable[Tuple[str, int, int, int, int]], needle: str) -> Optional[Tuple[int, int, int, int]]:

@@ -1,16 +1,36 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
-from players_search.config import load_emulator_window_title, load_settings
-from players_search.runner import run_fill, run_calibrate
+from players_search.config import load_emulator_window_title, load_settings, load_ui_settings
 from players_search.debug_env import debug_env
-from players_search.win_window import list_visible_window_titles
-from players_search.stepper import run_step
-from players_search.config import load_ui_settings
-from players_search.ui_automation import EmulatorUI
-from players_search.ocr import configure_tesseract
-from players_search.debug_vision import probe_text
+
+
+def _build_ui(*, ui_sleep: float):
+    """Create EmulatorUI lazily so non-UI commands can start without a display."""
+    from players_search.ocr import configure_tesseract
+    from players_search.ui_automation import EmulatorUI
+
+    ui_s = load_ui_settings()
+    configure_tesseract(ui_s.tesseract_cmd)
+    return EmulatorUI(
+        emulator_window_title=ui_s.emulator_window_title,
+        ocr_lang=ui_s.ocr_lang,
+        template_club_tab=ui_s.template_club_tab,
+        template_search_box=ui_s.template_search_box,
+        template_search_button=ui_s.template_search_button,
+        template_first_result=ui_s.template_first_result,
+        template_home_button=ui_s.template_home_button,
+        layout_switch_hotkey=ui_s.layout_switch_hotkey,
+        coord_club_tab=ui_s.coord_club_tab,
+        coord_search_box=ui_s.coord_search_box,
+        coord_first_result=ui_s.coord_first_result,
+        coord_back_home=ui_s.coord_back_home,
+        roi_member_list=ui_s.roi_member_list,
+        roi_player_card=ui_s.roi_player_card,
+        ui_sleep=ui_sleep,
+    )
 
 
 def main() -> int:
@@ -30,7 +50,7 @@ def main() -> int:
     p_windows.add_argument("--limit", type=int, default=50)
 
     p_step = sub.add_parser("step", help="Run steps 1..N for debugging (includes prerequisites)")
-    p_step.add_argument("name", choices=["club_tab", "search_club", "open_first", "find_player", "home"])
+    p_step.add_argument("name", choices=["club_tab", "search_club", "open_first", "find_player", "read_supercell_id", "home"])
     p_step.add_argument("--club-tag", default="")
     p_step.add_argument("--player-name", default="")
     p_step.add_argument("--sleep", type=float, default=0.6)
@@ -51,6 +71,8 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.cmd == "calibrate":
+        from players_search.runner import run_calibrate
+
         title = load_emulator_window_title()
         run_calibrate(interval=args.interval, emulator_window_title=title)
         return 0
@@ -60,10 +82,15 @@ def main() -> int:
         return 0
 
     if args.cmd == "list-windows":
+        from players_search.win_window import list_visible_window_titles
+
         for t in list_visible_window_titles(limit=args.limit):
             print(t)
         return 0
+
     if args.cmd == "step":
+        from players_search.stepper import run_step
+
         title = load_emulator_window_title()
         run_step(
             step=args.name,
@@ -73,27 +100,11 @@ def main() -> int:
             ui_sleep=args.sleep,
         )
         return 0
-    if args.cmd == "probe-text":
-        ui_s = load_ui_settings()
-        configure_tesseract(ui_s.tesseract_cmd)
-        ui = EmulatorUI(
-            emulator_window_title=ui_s.emulator_window_title,
-            ocr_lang=ui_s.ocr_lang,
-            template_club_tab=ui_s.template_club_tab,
-            template_search_box=ui_s.template_search_box,
-            template_search_button=ui_s.template_search_button,
-            template_first_result=ui_s.template_first_result,
-            layout_switch_hotkey=ui_s.layout_switch_hotkey,
-            coord_club_tab=ui_s.coord_club_tab,
-            coord_search_box=ui_s.coord_search_box,
-            coord_first_result=ui_s.coord_first_result,
-            coord_back_home=ui_s.coord_back_home,
-            roi_member_list=ui_s.roi_member_list,
-            roi_player_card=ui_s.roi_player_card,
-            ui_sleep=args.sleep,
-        )
-        from pathlib import Path
 
+    if args.cmd == "probe-text":
+        from players_search.debug_vision import probe_text
+
+        ui = _build_ui(ui_sleep=args.sleep)
         res = probe_text(ui=ui, text=args.text, out_dir=Path(args.out_dir), click=args.click)
         print(f"found={res.found}")
         print(res.screenshot_path)
@@ -105,24 +116,9 @@ def main() -> int:
             print(res.ocr_text)
             print("----- OCR END -----")
         return 0
+
     if args.cmd == "probe-template":
-        ui_s = load_ui_settings()
-        ui = EmulatorUI(
-            emulator_window_title=ui_s.emulator_window_title,
-            ocr_lang=ui_s.ocr_lang,
-            template_club_tab=ui_s.template_club_tab,
-            template_search_box=ui_s.template_search_box,
-            template_search_button=ui_s.template_search_button,
-            template_first_result=ui_s.template_first_result,
-            layout_switch_hotkey=ui_s.layout_switch_hotkey,
-            coord_club_tab=ui_s.coord_club_tab,
-            coord_search_box=ui_s.coord_search_box,
-            coord_first_result=ui_s.coord_first_result,
-            coord_back_home=ui_s.coord_back_home,
-            roi_member_list=ui_s.roi_member_list,
-            roi_player_card=ui_s.roi_player_card,
-            ui_sleep=args.sleep,
-        )
+        ui = _build_ui(ui_sleep=args.sleep)
         match = ui.locate_template(args.template, min_score=args.min_score)
         if not match:
             print("found=False")
@@ -133,9 +129,10 @@ def main() -> int:
             print("clicked=True")
         return 0
 
-    settings = load_settings()
-
     if args.cmd == "run":
+        from players_search.runner import run_fill
+
+        settings = load_settings()
         run_fill(settings=settings, limit=args.limit, dry_run=args.dry_run, ui_sleep=args.sleep)
         return 0
 

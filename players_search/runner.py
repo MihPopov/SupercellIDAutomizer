@@ -3,16 +3,13 @@ from __future__ import annotations
 import time
 from typing import Optional
 
-import pyautogui
 
 from players_search.config import Settings
-from players_search.ocr import configure_tesseract
-from players_search.supabase_repo import PlayersInProgressRepo
-from players_search.ui_automation import EmulatorUI
-from players_search.win_window import WindowTarget
 
 
 def run_calibrate(*, interval: float, emulator_window_title: str) -> None:
+    import pyautogui
+    from players_search.win_window import WindowTarget
     print("Move mouse to a target UI element inside the emulator window; press Ctrl+C to stop.")
     print(f"Window title: {emulator_window_title!r}")
     wt = WindowTarget(emulator_window_title)
@@ -27,7 +24,8 @@ def run_calibrate(*, interval: float, emulator_window_title: str) -> None:
         time.sleep(interval)
 
 
-def _create_ui(settings: Settings, ui_sleep: float) -> EmulatorUI:
+def _create_ui(settings: Settings, ui_sleep: float):
+    from players_search.ui_automation import EmulatorUI
     return EmulatorUI(
         emulator_window_title=settings.emulator_window_title,
         ocr_lang=settings.ocr_lang,
@@ -35,6 +33,7 @@ def _create_ui(settings: Settings, ui_sleep: float) -> EmulatorUI:
         template_search_box=settings.template_search_box,
         template_search_button=settings.template_search_button,
         template_first_result=settings.template_first_result,
+        template_home_button=settings.template_home_button,
         layout_switch_hotkey=settings.layout_switch_hotkey,
         coord_club_tab=settings.coord_club_tab,
         coord_search_box=settings.coord_search_box,
@@ -47,6 +46,9 @@ def _create_ui(settings: Settings, ui_sleep: float) -> EmulatorUI:
 
 
 def run_fill(*, settings: Settings, limit: int, dry_run: bool, ui_sleep: float) -> None:
+    from players_search.ocr import configure_tesseract
+    from players_search.supabase_repo import PlayersInProgressRepo
+
     configure_tesseract(settings.tesseract_cmd)
     repo = PlayersInProgressRepo(settings)
     ui = _create_ui(settings, ui_sleep=ui_sleep)
@@ -61,7 +63,13 @@ def run_fill(*, settings: Settings, limit: int, dry_run: bool, ui_sleep: float) 
         try:
             ui.search_club_by_tag(row.club_tag)
             ui.open_first_club_result()
-            scid: Optional[str] = ui.find_player_and_get_supercell_id(row.name)
+            opened = ui.find_player_and_open_profile(row.name)
+            if not opened:
+                ui.go_home()
+                print("  -> Player not found (OCR).")
+                continue
+
+            scid: Optional[str] = ui.read_supercell_id_from_profile()
             ui.go_home()
 
             if not scid:

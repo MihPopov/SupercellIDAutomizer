@@ -360,6 +360,17 @@ class EmulatorUI:
         pyautogui.dragTo(x, end_y, duration=max(0.15, self.ui_sleep / 2), button="left")
         self._sleep()
 
+    def _scroll_member_list_up(self) -> None:
+        # Reverse drag to move the list up (towards the beginning/top).
+        self._ensure_emulator_active()
+        left, top, width, height = self.window.to_screen_roi(self.roi_member_list)
+        x = left + width // 2
+        start_y = top + int(height * 0.28)
+        end_y = top + int(height * 0.82)
+        pyautogui.moveTo(x, start_y)
+        pyautogui.dragTo(x, end_y, duration=max(0.15, self.ui_sleep / 2), button="left")
+        self._sleep()
+
     def go_home(self) -> None:
         # Prefer template matching for the Home button, then coordinate fallback.
         if self.template_home_button and self.click_template(self.template_home_button, min_score=0.82):
@@ -399,7 +410,7 @@ class EmulatorUI:
             return
         self._click(self.coord_first_result)
 
-    def find_player_and_open_profile(self, player_name: str, max_scrolls: int = 30) -> bool:
+    def find_player_and_open_profile(self, player_name: str, max_scrolls: int = 18, max_cycles: int = 4) -> bool:
         """Find a player in the club member list and open their profile.
 
         This is step 4 only: it scans the visible list, scrolls as needed, and
@@ -409,7 +420,12 @@ class EmulatorUI:
         if not _normalize_player_text(player_name):
             return False
 
-        for attempt in range(max_scrolls + 1):
+        direction_down = True
+        scrolls_in_direction = 0
+        cycles_done = 0
+        seen_signatures: set[str] = set()
+
+        while cycles_done < max_cycles:
             list_img = self._screenshot(self.roi_member_list)
             # First pass is fast; if it misses the nickname, run high-recall OCR
             # variants before scrolling away from the currently visible list.
@@ -425,8 +441,25 @@ class EmulatorUI:
                 self._sleep()
                 return True
 
-            if attempt < max_scrolls:
+            # Keep a lightweight signature of currently visible text to detect
+            # stagnation/end-of-list states and switch direction sooner.
+            words_sorted = sorted(words, key=lambda w: (w[2], w[1]))
+            top_sig = " ".join(w[0] for w in words_sorted[:5]).casefold()
+            bottom_sig = " ".join(w[0] for w in words_sorted[-5:]).casefold()
+            signature = f"{top_sig}|{bottom_sig}|{'d' if direction_down else 'u'}"
+            repeated = signature in seen_signatures
+            seen_signatures.add(signature)
+
+            if direction_down:
                 self._scroll_member_list()
+            else:
+                self._scroll_member_list_up()
+            scrolls_in_direction += 1
+
+            if repeated or scrolls_in_direction >= max_scrolls:
+                direction_down = not direction_down
+                scrolls_in_direction = 0
+                cycles_done += 1
 
         return False
 
@@ -470,15 +503,26 @@ class EmulatorUI:
 
     def read_supercell_id_from_profile(self) -> Optional[str]:
         """Read the case-sensitive Supercell ID from the profile nameplate."""
-        card_img = self._screenshot(self.roi_player_card)
-        id_img = self._crop_supercell_id_box(card_img)
         whitelist = "#ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-        texts = image_to_text_variants(id_img, lang="eng", whitelist=whitelist)
-        texts.append(image_to_text(id_img, lang="eng"))
-        for text in texts:
-            scid = extract_case_sensitive_supercell_id(text)
-            if scid:
-                return scid
+        deadline = time.time() + 4.0
+        while time.time() < deadline:
+            card_img = self._screenshot(self.roi_player_card)
+            id_img = self._crop_supercell_id_box(card_img)
+
+            # Try both dynamic crop and a fixed anchor near the top-left where
+            # the black nameplate is expected.
+            w, h = id_img.size
+            anchor_crop = card_img.crop((0, 0, int(card_img.size[0] * 0.58), int(card_img.size[1] * 0.5)))
+            candidates = [id_img, anchor_crop]
+
+            for candidate_img in candidates:
+                texts = image_to_text_variants(candidate_img, lang="eng", whitelist=whitelist)
+                texts.append(image_to_text(candidate_img, lang="eng"))
+                for text in texts:
+                    scid = extract_case_sensitive_supercell_id(text)
+                    if scid and len(scid) >= 6:
+                        return scid
+            time.sleep(0.35)
         return None
 
     def find_player_and_get_supercell_id(self, player_name: str, max_scrolls: int = 30) -> Optional[str]:

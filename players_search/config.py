@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import os
 from typing import Optional, Tuple
 
-from dotenv import load_dotenv
+from players_search.env_loader import load_dotenv_file
 
 
 def _env(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -47,6 +47,7 @@ class Settings:
     template_search_box: Optional[str]
     template_search_button: Optional[str]
     template_first_result: Optional[str]
+    template_home_button: Optional[str]
     layout_switch_hotkey: str
     coord_club_tab: Tuple[int, int]
     coord_search_box: Tuple[int, int]
@@ -57,7 +58,7 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    load_dotenv()
+    load_dotenv_file()
 
     supabase_url = _env("SUPABASE_URL")
     supabase_key = _env("SUPABASE_SERVICE_ROLE_KEY")
@@ -79,6 +80,7 @@ def load_settings() -> Settings:
         template_search_box=_env("TEMPLATE_SEARCH_BOX"),
         template_search_button=_env("TEMPLATE_SEARCH_BUTTON"),
         template_first_result=_env("TEMPLATE_FIRST_RESULT"),
+        template_home_button=_env("TEMPLATE_HOME_BUTTON"),
         layout_switch_hotkey=_env("LAYOUT_SWITCH_HOTKEY", "alt+shift") or "alt+shift",
         coord_club_tab=(
             _env_int("COORD_CLUB_TAB_X", 100),
@@ -105,7 +107,7 @@ def load_emulator_window_title() -> str:
     """
     Loads only emulator window title from .env without requiring Supabase keys.
     """
-    load_dotenv()
+    load_dotenv_file()
     return _env("EMULATOR_WINDOW_TITLE", "BlueStacks") or "BlueStacks"
 
 
@@ -118,6 +120,7 @@ class UISettings:
     template_search_box: Optional[str]
     template_search_button: Optional[str]
     template_first_result: Optional[str]
+    template_home_button: Optional[str]
     layout_switch_hotkey: str
     coord_club_tab: Tuple[int, int]
     coord_search_box: Tuple[int, int]
@@ -131,7 +134,7 @@ def load_ui_settings() -> UISettings:
     """
     Loads only UI/OCR settings from .env without requiring Supabase keys.
     """
-    load_dotenv()
+    load_dotenv_file()
     return UISettings(
         emulator_window_title=load_emulator_window_title(),
         tesseract_cmd=_env("TESSERACT_CMD"),
@@ -140,6 +143,7 @@ def load_ui_settings() -> UISettings:
         template_search_box=_env("TEMPLATE_SEARCH_BOX"),
         template_search_button=_env("TEMPLATE_SEARCH_BUTTON"),
         template_first_result=_env("TEMPLATE_FIRST_RESULT"),
+        template_home_button=_env("TEMPLATE_HOME_BUTTON"),
         layout_switch_hotkey=_env("LAYOUT_SWITCH_HOTKEY", "alt+shift") or "alt+shift",
         coord_club_tab=(
             _env_int("COORD_CLUB_TAB_X", 100),

@@ -3,5 +3,5 @@ python-dotenv>=1.0.1
 pyautogui>=0.9.54
 pillow>=10.4.0
 pytesseract>=0.3.10
-opencv-python>=4.10.0.84
+opencv-python-headless>=4.10.0.84
 pyperclip>=1.9.0

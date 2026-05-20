@@ -45,6 +45,11 @@ def main() -> int:
     p_cal = sub.add_parser("calibrate", help="Print mouse coordinates for calibration")
     p_cal.add_argument("--interval", type=float, default=0.5)
 
+    p_lock = sub.add_parser("lock-window", help="Activate emulator and optionally enforce/check window size")
+    p_lock.add_argument("--width", type=int, default=None, help="Target window width in pixels")
+    p_lock.add_argument("--height", type=int, default=None, help="Target window height in pixels")
+    p_lock.add_argument("--strict", action="store_true", help="Fail if final size != requested size")
+
     sub.add_parser("debug-env", help="Print loaded env (.env) for troubleshooting")
     p_windows = sub.add_parser("list-windows", help="List visible window titles (to set EMULATOR_WINDOW_TITLE)")
     p_windows.add_argument("--limit", type=int, default=50)
@@ -79,6 +84,20 @@ def main() -> int:
 
     if args.cmd == "debug-env":
         debug_env()
+        return 0
+
+    if args.cmd == "lock-window":
+        from players_search.runner import run_lock_window
+
+        if (args.width is None) ^ (args.height is None):
+            raise RuntimeError("Provide both --width and --height, or neither.")
+        title = load_emulator_window_title()
+        run_lock_window(
+            emulator_window_title=title,
+            width=args.width,
+            height=args.height,
+            strict=args.strict,
+        )
         return 0
 
     if args.cmd == "list-windows":

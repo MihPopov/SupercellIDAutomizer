@@ -87,6 +87,9 @@ ROI_PLAYER_CARD=120,140,650,160
   - `python -m players_search run --limit 50`
 - Калибровка координат (печатает текущие координаты курсора раз в 0.5с):
   - `python -m players_search calibrate`
+- Зафиксировать/проверить размер окна эмулятора (для стабильных ROI/COORD):
+  - `python -m players_search lock-window --width 1920 --height 1080`
+  - `python -m players_search lock-window --width 1920 --height 1080 --strict`
 - Если не знаете заголовок окна эмулятора:
   - `python -m players_search list-windows`
 - Пошаговая проверка отдельных действий:

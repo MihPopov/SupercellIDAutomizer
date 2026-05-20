@@ -24,6 +24,39 @@ def run_calibrate(*, interval: float, emulator_window_title: str) -> None:
         time.sleep(interval)
 
 
+def run_lock_window(
+    *,
+    emulator_window_title: str,
+    width: Optional[int],
+    height: Optional[int],
+    strict: bool,
+) -> None:
+    from players_search.win_window import WindowTarget
+
+    wt = WindowTarget(emulator_window_title)
+    wt.restore_and_activate()
+    before = wt.rect()
+    print(f"window title: {emulator_window_title!r}")
+    print(f"before: left={before.left} top={before.top} width={before.width} height={before.height}")
+
+    if width is not None and height is not None:
+        ok = wt.set_size(width=width, height=height)
+        if not ok:
+            print("resize request: rejected by WinAPI")
+        time.sleep(0.2)
+
+    after = wt.rect()
+    print(f"after:  left={after.left} top={after.top} width={after.width} height={after.height}")
+    print(f"for .env: ROI/COORD are interpreted in this window space ({after.width}x{after.height})")
+
+    if strict and width is not None and height is not None:
+        if after.width != width or after.height != height:
+            raise RuntimeError(
+                f"Window size mismatch: expected {width}x{height}, got {after.width}x{after.height}. "
+                "Resize emulator manually or disable --strict."
+            )
+
+
 def _create_ui(settings: Settings, ui_sleep: float):
     from players_search.ui_automation import EmulatorUI
     return EmulatorUI(

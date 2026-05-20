@@ -54,6 +54,9 @@ user32.IsIconic.restype = wintypes.BOOL
 user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
 user32.ShowWindow.restype = wintypes.BOOL
 
+user32.MoveWindow.argtypes = (wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.BOOL)
+user32.MoveWindow.restype = wintypes.BOOL
+
 SW_RESTORE = 9
 
 user32.SendMessageW.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
@@ -158,6 +161,15 @@ class WindowTarget:
         if not ok:
             raise RuntimeError("GetWindowRect failed")
         return WindowRect(left=int(r.left), top=int(r.top), right=int(r.right), bottom=int(r.bottom))
+
+    def set_size(self, *, width: int, height: int) -> bool:
+        """
+        Best-effort window resize preserving current top-left position.
+        Returns True if WinAPI accepted the request.
+        """
+        hwnd = self._resolve_hwnd()
+        r = self.rect()
+        return bool(user32.MoveWindow(hwnd, int(r.left), int(r.top), int(width), int(height), True))
 
     def input_language_id(self) -> Optional[int]:
         """Return the target window keyboard layout language id, e.g. 0x0409 for EN-US.

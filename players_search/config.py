@@ -43,6 +43,7 @@ class Settings:
     emulator_window_title: str
     tesseract_cmd: Optional[str]
     ocr_lang: str
+    ocr_engine: str
     template_club_tab: Optional[str]
     template_search_box: Optional[str]
     template_search_button: Optional[str]
@@ -76,6 +77,7 @@ def load_settings() -> Settings:
         emulator_window_title=_env("EMULATOR_WINDOW_TITLE", "BlueStacks") or "BlueStacks",
         tesseract_cmd=_env("TESSERACT_CMD"),
         ocr_lang=_env("OCR_LANG", "rus+eng") or "rus+eng",
+        ocr_engine=_env("OCR_ENGINE", "tesseract") or "tesseract",
         template_club_tab=_env("TEMPLATE_CLUB_TAB"),
         template_search_box=_env("TEMPLATE_SEARCH_BOX"),
         template_search_button=_env("TEMPLATE_SEARCH_BUTTON"),
@@ -116,6 +118,7 @@ class UISettings:
     emulator_window_title: str
     tesseract_cmd: Optional[str]
     ocr_lang: str
+    ocr_engine: str
     template_club_tab: Optional[str]
     template_search_box: Optional[str]
     template_search_button: Optional[str]
@@ -139,6 +142,7 @@ def load_ui_settings() -> UISettings:
         emulator_window_title=load_emulator_window_title(),
         tesseract_cmd=_env("TESSERACT_CMD"),
         ocr_lang=_env("OCR_LANG", "rus+eng") or "rus+eng",
+        ocr_engine=_env("OCR_ENGINE", "tesseract") or "tesseract",
         template_club_tab=_env("TEMPLATE_CLUB_TAB"),
         template_search_box=_env("TEMPLATE_SEARCH_BOX"),
         template_search_button=_env("TEMPLATE_SEARCH_BUTTON"),

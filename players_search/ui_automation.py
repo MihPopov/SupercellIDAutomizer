@@ -142,6 +142,7 @@ class EmulatorUI:
         *,
         emulator_window_title: str,
         ocr_lang: str,
+        ocr_engine: str,
         template_club_tab: Optional[str],
         template_search_box: Optional[str],
         template_search_button: Optional[str],
@@ -158,6 +159,7 @@ class EmulatorUI:
     ) -> None:
         self.window = WindowTarget(emulator_window_title)
         self.ocr_lang = ocr_lang
+        self.ocr_engine = ocr_engine
         self.template_club_tab = template_club_tab
         self.template_search_box = template_search_box
         self.template_search_button = template_search_button
@@ -429,10 +431,10 @@ class EmulatorUI:
             list_img = self._screenshot(self.roi_member_list)
             # First pass is fast; if it misses the nickname, run high-recall OCR
             # variants before scrolling away from the currently visible list.
-            words = image_to_words(list_img, lang=self.ocr_lang)
+            words = image_to_words(list_img, lang=self.ocr_lang, engine=self.ocr_engine)
             match = _find_player_match(words, player_name)
             if not match:
-                words = image_to_words_variants(list_img, lang=self.ocr_lang)
+                words = image_to_words_variants(list_img, lang=self.ocr_lang, engine=self.ocr_engine)
                 match = _find_player_match(words, player_name)
             if match:
                 left0, top0, _, _ = self.roi_member_list
@@ -516,8 +518,8 @@ class EmulatorUI:
             candidates = [id_img, anchor_crop]
 
             for candidate_img in candidates:
-                texts = image_to_text_variants(candidate_img, lang="eng", whitelist=whitelist)
-                texts.append(image_to_text(candidate_img, lang="eng"))
+                texts = image_to_text_variants(candidate_img, lang="eng", whitelist=whitelist, engine=self.ocr_engine)
+                texts.append(image_to_text(candidate_img, lang="eng", engine=self.ocr_engine))
                 for text in texts:
                     scid = extract_case_sensitive_supercell_id(text)
                     if scid and len(scid) >= 6:

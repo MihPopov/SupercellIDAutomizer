@@ -9,14 +9,16 @@ from players_search.debug_env import debug_env
 
 def _build_ui(*, ui_sleep: float):
     """Create EmulatorUI lazily so non-UI commands can start without a display."""
-    from players_search.ocr import configure_tesseract
+    from players_search.ocr import configure_ocr_engine, configure_tesseract
     from players_search.ui_automation import EmulatorUI
 
     ui_s = load_ui_settings()
     configure_tesseract(ui_s.tesseract_cmd)
+    configure_ocr_engine(ui_s.ocr_engine)
     return EmulatorUI(
         emulator_window_title=ui_s.emulator_window_title,
         ocr_lang=ui_s.ocr_lang,
+        ocr_engine=ui_s.ocr_engine,
         template_club_tab=ui_s.template_club_tab,
         template_search_box=ui_s.template_search_box,
         template_search_button=ui_s.template_search_button,

@@ -26,11 +26,13 @@ def debug_env() -> None:
 
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    ocr_engine = os.getenv("OCR_ENGINE")
 
     print(f"SUPABASE_URL: {_mask(url)}")
     if url:
         print(f"  raw prefix: {url.strip()[:32]}")
     print(f"SUPABASE_SERVICE_ROLE_KEY: {_mask(key)}")
+    print(f"OCR_ENGINE: {ocr_engine or 'tesseract'}")
     if key:
         print(f"  key startswith 'eyJ': {key.strip().startswith('eyJ')}")
 

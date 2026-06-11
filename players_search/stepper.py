@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import List
 
 from players_search.config import load_ui_settings
-from players_search.ocr import configure_tesseract
+from players_search.ocr import configure_ocr_engine, configure_tesseract
 from players_search.ui_automation import EmulatorUI
 
 
@@ -13,9 +13,11 @@ def _ui(emulator_window_title: str, ui_sleep: float) -> EmulatorUI:
     """
     s = load_ui_settings()
     configure_tesseract(s.tesseract_cmd)
+    configure_ocr_engine(s.ocr_engine)
     return EmulatorUI(
         emulator_window_title=emulator_window_title,
         ocr_lang=s.ocr_lang,
+        ocr_engine=s.ocr_engine,
         template_club_tab=s.template_club_tab,
         template_search_box=s.template_search_box,
         template_search_button=s.template_search_button,

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import re
-from typing import Dict, Iterable, List, Optional, Tuple
+from functools import lru_cache
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import pytesseract
 import cv2
@@ -10,6 +13,13 @@ from PIL import Image
 
 
 _TAG_RE = re.compile(r"^#?[A-Z0-9]{3,14}$")
+_DEFAULT_OCR_ENGINE = "tesseract"
+
+
+def configure_ocr_engine(engine: Optional[str]) -> None:
+    global _DEFAULT_OCR_ENGINE
+    if engine:
+        _DEFAULT_OCR_ENGINE = engine.strip().lower()
 
 
 def configure_tesseract(tesseract_cmd: Optional[str]) -> None:
@@ -61,7 +71,133 @@ def preprocess_for_ocr_variants(img: Image.Image, *, scale: int = 2) -> List[Ima
     ]
 
 
-def image_to_text(img: Image.Image, *, lang: str = "rus+eng", scale: int = 2) -> str:
+def _engine_name(engine: Optional[str]) -> str:
+    return (engine or _DEFAULT_OCR_ENGINE or "tesseract").strip().lower()
+
+
+def _wants_paddle(engine: str) -> bool:
+    return engine in {"paddle", "paddleocr", "auto"}
+
+
+def _allows_tesseract(engine: str) -> bool:
+    return engine in {"tesseract", "auto"}
+
+
+def _ensure_paddle_available(engine: str) -> None:
+    if engine in {"paddle", "paddleocr"} and importlib.util.find_spec("paddleocr") is None:
+        raise RuntimeError("OCR_ENGINE=paddle requires PaddleOCR. Install: pip install -r requirements-ocr-paddle.txt")
+
+
+@lru_cache(maxsize=4)
+def _paddle_ocr(lang: str):
+    if importlib.util.find_spec("paddleocr") is None:
+        return None
+    paddleocr = importlib.import_module("paddleocr")
+    paddle_lang = "en" if lang in {"eng", "en"} else lang
+    kwargs = {
+        "lang": paddle_lang,
+        "use_doc_orientation_classify": False,
+        "use_doc_unwarping": False,
+        "use_textline_orientation": False,
+    }
+    try:
+        return paddleocr.PaddleOCR(**kwargs)
+    except TypeError:
+        # Older PaddleOCR releases use different keyword names.
+        return paddleocr.PaddleOCR(lang=paddle_lang, use_angle_cls=False)
+
+
+def _paddle_predict(img: Image.Image, *, lang: str) -> List[Any]:
+    ocr = _paddle_ocr(lang)
+    if ocr is None:
+        return []
+    arr = np.array(img.convert("RGB"))
+    if hasattr(ocr, "predict"):
+        result = ocr.predict(arr)
+    else:
+        result = ocr.ocr(arr, cls=False)
+    if result is None:
+        return []
+    return result if isinstance(result, list) else [result]
+
+
+def _walk_paddle_objects(obj: Any) -> Iterator[Any]:
+    if obj is None:
+        return
+    if isinstance(obj, dict):
+        yield obj
+        for v in obj.values():
+            yield from _walk_paddle_objects(v)
+    elif isinstance(obj, (list, tuple)):
+        yield obj
+        for v in obj:
+            yield from _walk_paddle_objects(v)
+    elif hasattr(obj, "json"):
+        json_value = obj.json
+        if callable(json_value):
+            json_value = json_value()
+        yield from _walk_paddle_objects(json_value)
+
+
+def _box_from_paddle(value: Any) -> Optional[Tuple[int, int, int, int]]:
+    arr = np.array(value)
+    if arr.size == 4 and arr.ndim == 1:
+        x1, y1, x2, y2 = [int(v) for v in arr.tolist()]
+        return (x1, y1, max(1, x2 - x1), max(1, y2 - y1))
+    if arr.ndim >= 2 and arr.shape[-1] >= 2:
+        xs = arr[..., 0].astype(float)
+        ys = arr[..., 1].astype(float)
+        x1, y1 = int(xs.min()), int(ys.min())
+        x2, y2 = int(xs.max()), int(ys.max())
+        return (x1, y1, max(1, x2 - x1), max(1, y2 - y1))
+    return None
+
+
+def _paddle_texts_and_words(img: Image.Image, *, lang: str = "eng") -> Tuple[List[str], List[Tuple[str, int, int, int, int]]]:
+    texts: List[str] = []
+    words: List[Tuple[str, int, int, int, int]] = []
+    result = _paddle_predict(img, lang=lang)
+
+    for obj in _walk_paddle_objects(result):
+        if isinstance(obj, dict):
+            if "rec_text" in obj and isinstance(obj["rec_text"], str):
+                texts.append(obj["rec_text"])
+            rec_texts = obj.get("rec_texts")
+            if isinstance(rec_texts, list):
+                boxes = obj.get("rec_boxes") or obj.get("rec_polys") or obj.get("dt_polys") or []
+                for i, text in enumerate(rec_texts):
+                    if not isinstance(text, str) or not text.strip():
+                        continue
+                    texts.append(text)
+                    if i < len(boxes):
+                        box = _box_from_paddle(boxes[i])
+                        if box:
+                            words.append((text.strip(), *box))
+        elif isinstance(obj, (list, tuple)):
+            # PaddleOCR 2.x style: [box, (text, score)]
+            if len(obj) >= 2 and isinstance(obj[1], (list, tuple)) and obj[1] and isinstance(obj[1][0], str):
+                text = obj[1][0].strip()
+                box = _box_from_paddle(obj[0])
+                if text:
+                    texts.append(text)
+                    if box:
+                        words.append((text, *box))
+
+    dedup_texts = list(dict.fromkeys(t.strip() for t in texts if t and t.strip()))
+    dedup_words: Dict[Tuple[str, int, int, int, int], Tuple[str, int, int, int, int]] = {}
+    for text, left, top, width, height in words:
+        key = (text.casefold(), left // 4, top // 4, width // 4, height // 4)
+        dedup_words[key] = (text, left, top, width, height)
+    return dedup_texts, sorted(dedup_words.values(), key=lambda w: (w[2], w[1]))
+
+
+def image_to_text(img: Image.Image, *, lang: str = "rus+eng", scale: int = 2, engine: Optional[str] = None) -> str:
+    engine_name = _engine_name(engine)
+    if _wants_paddle(engine_name):
+        _ensure_paddle_available(engine_name)
+        texts, _words = _paddle_texts_and_words(img, lang=lang)
+        if texts or not _allows_tesseract(engine_name):
+            return "\n".join(texts).strip()
     # PSM 6 = Assume a single uniform block of text.
     pre = preprocess_for_ocr(img, scale=scale)
     try:
@@ -75,10 +211,17 @@ def image_to_words(
     *,
     lang: str = "rus+eng",
     scale: int = 2,
+    engine: Optional[str] = None,
 ) -> List[Tuple[str, int, int, int, int]]:
     """
     Returns (text, left, top, width, height) for each OCR token.
     """
+    engine_name = _engine_name(engine)
+    if _wants_paddle(engine_name):
+        _ensure_paddle_available(engine_name)
+        _texts, words = _paddle_texts_and_words(img, lang=lang)
+        if words or not _allows_tesseract(engine_name):
+            return words
     pre = preprocess_for_ocr(img, scale=scale)
     try:
         data = pytesseract.image_to_data(pre, lang=lang, config="--psm 6", output_type=pytesseract.Output.DICT)
@@ -108,9 +251,18 @@ def image_to_words_variants(
     lang: str = "rus+eng",
     scale: int = 2,
     psms: Tuple[int, ...] = (6, 11),
+    engine: Optional[str] = None,
 ) -> List[Tuple[str, int, int, int, int]]:
     """OCR words using multiple preprocessors/PSM modes and dedupe boxes."""
+    engine_name = _engine_name(engine)
     merged: Dict[Tuple[str, int, int, int, int], Tuple[str, int, int, int, int]] = {}
+    if _wants_paddle(engine_name):
+        _ensure_paddle_available(engine_name)
+        _texts, paddle_words = _paddle_texts_and_words(img, lang=lang)
+        for text, l, t, w, h in paddle_words:
+            merged[(text.casefold(), l // 4, t // 4, w // 4, h // 4)] = (text, l, t, w, h)
+        if paddle_words and not _allows_tesseract(engine_name):
+            return sorted(merged.values(), key=lambda w: (w[2], w[1]))
     variants = preprocess_for_ocr_variants(img, scale=scale)
     for pre in variants:
         for psm in psms:
@@ -157,9 +309,17 @@ def image_to_text_variants(
     scale: int = 3,
     psms: Tuple[int, ...] = (7, 8, 11),
     whitelist: Optional[str] = None,
+    engine: Optional[str] = None,
 ) -> List[str]:
     """Return OCR strings from several preprocessors while preserving case."""
+    engine_name = _engine_name(engine)
     texts: List[str] = []
+    if _wants_paddle(engine_name):
+        _ensure_paddle_available(engine_name)
+        paddle_texts, _words = _paddle_texts_and_words(img, lang=lang)
+        texts.extend(paddle_texts)
+        if paddle_texts and not _allows_tesseract(engine_name):
+            return list(dict.fromkeys(texts))
     config_suffix = f" -c tessedit_char_whitelist={whitelist}" if whitelist else ""
     for pre in preprocess_for_ocr_variants(img, scale=scale):
         for psm in psms:
@@ -170,7 +330,7 @@ def image_to_text_variants(
                 raw = pytesseract.image_to_string(pre, lang="eng", config=config).strip()
             if raw:
                 texts.append(raw)
-    return texts
+    return list(dict.fromkeys(texts))
 
 
 def extract_case_sensitive_supercell_id(text: str) -> Optional[str]:

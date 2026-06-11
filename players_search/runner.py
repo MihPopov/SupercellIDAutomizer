@@ -62,6 +62,7 @@ def _create_ui(settings: Settings, ui_sleep: float):
     return EmulatorUI(
         emulator_window_title=settings.emulator_window_title,
         ocr_lang=settings.ocr_lang,
+        ocr_engine=settings.ocr_engine,
         template_club_tab=settings.template_club_tab,
         template_search_box=settings.template_search_box,
         template_search_button=settings.template_search_button,
@@ -79,10 +80,11 @@ def _create_ui(settings: Settings, ui_sleep: float):
 
 
 def run_fill(*, settings: Settings, limit: int, dry_run: bool, ui_sleep: float) -> None:
-    from players_search.ocr import configure_tesseract
+    from players_search.ocr import configure_ocr_engine, configure_tesseract
     from players_search.supabase_repo import PlayersInProgressRepo
 
     configure_tesseract(settings.tesseract_cmd)
+    configure_ocr_engine(settings.ocr_engine)
     repo = PlayersInProgressRepo(settings)
     ui = _create_ui(settings, ui_sleep=ui_sleep)
 

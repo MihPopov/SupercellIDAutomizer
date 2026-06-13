@@ -26,7 +26,7 @@
 1. Активируйте venv.
 2. Установите зависимости:
    - `pip install -r requirements.txt`
-   - опционально для PaddleOCR: `pip install -r requirements-ocr-paddle.txt` и установите подходящий runtime PaddlePaddle (CPU/GPU) по официальной инструкции.
+   - опционально для PaddleOCR: `pip install -r requirements-ocr-paddle.txt` (файл ставит CPU runtime `paddlepaddle`; для GPU/CUDA замените его на подходящий пакет PaddlePaddle по официальной инструкции).
 3. Создайте `.env` (пример ниже).
 
 ## Настройка `.env`

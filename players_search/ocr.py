@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 import re
 from functools import lru_cache
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
@@ -99,6 +100,13 @@ def _paddle_install_hint() -> str:
     )
 
 
+def _configure_paddle_runtime_env() -> None:
+    """Set safe CPU defaults before PaddleOCR imports Paddle/PaddleX."""
+    os.environ.setdefault("PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT", "0")
+    os.environ.setdefault("FLAGS_use_mkldnn", "0")
+    os.environ.setdefault("FLAGS_use_onednn", "0")
+
+
 def _paddle_lang(lang: str) -> str:
     """Convert Tesseract language codes to a single PaddleOCR language code."""
     aliases = {
@@ -129,6 +137,7 @@ def _ensure_paddle_available(engine: str) -> None:
 def _paddle_ocr(lang: str):
     if _paddle_missing_packages():
         return None
+    _configure_paddle_runtime_env()
     paddleocr = importlib.import_module("paddleocr")
     paddle_lang = _paddle_lang(lang)
     kwargs = {

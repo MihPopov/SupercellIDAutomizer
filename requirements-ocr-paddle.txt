@@ -2,4 +2,4 @@
 paddleocr>=3.0.0
 # CPU runtime required by PaddleOCR. For GPU/CUDA setups, replace this with the
 # appropriate PaddlePaddle package from the official PaddlePaddle selector.
-paddlepaddle>=3.0.0
+paddlepaddle>=3.0.0,<3.3.0

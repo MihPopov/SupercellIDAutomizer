@@ -297,8 +297,6 @@ class EmulatorUI:
         pyautogui.press("enter")
         self._sleep()
 
-        if self.template_search_button and self.click_template(self.template_search_button, min_score=0.82):
-            return
         if self.click_text("искать") or self.click_text("search"):
             return
 
@@ -407,8 +405,17 @@ class EmulatorUI:
         self.open_club_tab()
         self.focus_club_search_box()
 
+    def _close_keyboard_after_input(self) -> None:
+        # Android emulators often keep the on-screen keyboard above the Search
+        # button after direct typing. Pressing Enter restored the previous flow:
+        # it commits the text / closes the keyboard before template matching.
+        self._ensure_emulator_active()
+        pyautogui.press("enter")
+        self._sleep()
+
     def input_club_tag_and_submit(self, club_tag: str) -> None:
         self._clear_and_input(club_tag)
+        self._close_keyboard_after_input()
         self._submit_search()
 
     def search_club_by_tag(self, club_tag: str) -> None:

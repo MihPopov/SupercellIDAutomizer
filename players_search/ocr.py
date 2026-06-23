@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 import re
 from functools import lru_cache
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
@@ -83,17 +84,62 @@ def _allows_tesseract(engine: str) -> bool:
     return engine in {"tesseract", "auto"}
 
 
+def _paddle_missing_packages() -> List[str]:
+    missing: List[str] = []
+    if importlib.util.find_spec("paddleocr") is None:
+        missing.append("paddleocr")
+    if importlib.util.find_spec("paddle") is None:
+        missing.append("paddlepaddle")
+    return missing
+
+
+def _paddle_install_hint() -> str:
+    return (
+        "Install the optional Paddle OCR dependencies into the same Python "
+        "environment that runs this app: pip install -r requirements-ocr-paddle.txt"
+    )
+
+
+def _configure_paddle_runtime_env() -> None:
+    """Set safe CPU defaults before PaddleOCR imports Paddle/PaddleX."""
+    os.environ.setdefault("PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT", "0")
+    os.environ.setdefault("FLAGS_use_mkldnn", "0")
+    os.environ.setdefault("FLAGS_use_onednn", "0")
+
+
+def _paddle_lang(lang: str) -> str:
+    """Convert Tesseract language codes to a single PaddleOCR language code."""
+    aliases = {
+        "eng": "en",
+        "en": "en",
+        "rus": "ru",
+        "ru": "ru",
+    }
+    parts = [part.strip().lower() for part in re.split(r"[+,]", lang or "") if part.strip()]
+    for preferred in ("eng", "en"):
+        if preferred in parts:
+            return aliases[preferred]
+    for part in parts:
+        return aliases.get(part, part)
+    return "en"
+
+
 def _ensure_paddle_available(engine: str) -> None:
-    if engine in {"paddle", "paddleocr"} and importlib.util.find_spec("paddleocr") is None:
-        raise RuntimeError("OCR_ENGINE=paddle requires PaddleOCR. Install: pip install -r requirements-ocr-paddle.txt")
+    missing = _paddle_missing_packages()
+    if engine in {"paddle", "paddleocr"} and missing:
+        raise RuntimeError(
+            f"OCR_ENGINE=paddle requires PaddleOCR and PaddlePaddle; missing: {', '.join(missing)}. "
+            f"{_paddle_install_hint()}"
+        )
 
 
 @lru_cache(maxsize=4)
 def _paddle_ocr(lang: str):
-    if importlib.util.find_spec("paddleocr") is None:
+    if _paddle_missing_packages():
         return None
+    _configure_paddle_runtime_env()
     paddleocr = importlib.import_module("paddleocr")
-    paddle_lang = "en" if lang in {"eng", "en"} else lang
+    paddle_lang = _paddle_lang(lang)
     kwargs = {
         "lang": paddle_lang,
         "use_doc_orientation_classify": False,
@@ -139,6 +185,14 @@ def _walk_paddle_objects(obj: Any) -> Iterator[Any]:
         yield from _walk_paddle_objects(json_value)
 
 
+def _first_paddle_field(obj: Dict[str, Any], *names: str) -> Any:
+    for name in names:
+        value = obj.get(name)
+        if value is not None:
+            return value
+    return []
+
+
 def _box_from_paddle(value: Any) -> Optional[Tuple[int, int, int, int]]:
     arr = np.array(value)
     if arr.size == 4 and arr.ndim == 1:
@@ -163,8 +217,10 @@ def _paddle_texts_and_words(img: Image.Image, *, lang: str = "eng") -> Tuple[Lis
             if "rec_text" in obj and isinstance(obj["rec_text"], str):
                 texts.append(obj["rec_text"])
             rec_texts = obj.get("rec_texts")
-            if isinstance(rec_texts, list):
-                boxes = obj.get("rec_boxes") or obj.get("rec_polys") or obj.get("dt_polys") or []
+            if isinstance(rec_texts, np.ndarray):
+                rec_texts = rec_texts.tolist()
+            if isinstance(rec_texts, (list, tuple)):
+                boxes = _first_paddle_field(obj, "rec_boxes", "rec_polys", "dt_polys")
                 for i, text in enumerate(rec_texts):
                     if not isinstance(text, str) or not text.strip():
                         continue

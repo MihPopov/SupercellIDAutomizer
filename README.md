@@ -26,7 +26,7 @@
 1. Активируйте venv.
 2. Установите зависимости:
    - `pip install -r requirements.txt`
-   - опционально для PaddleOCR: `pip install -r requirements-ocr-paddle.txt` и установите подходящий runtime PaddlePaddle (CPU/GPU) по официальной инструкции.
+   - опционально для PaddleOCR: `pip install -r requirements-ocr-paddle.txt` (файл ставит CPU runtime `paddlepaddle<3.3.0`; для GPU/CUDA замените его на подходящий пакет PaddlePaddle по официальной инструкции).
 3. Создайте `.env` (пример ниже).
 
 ## Настройка `.env`
@@ -46,6 +46,8 @@ COL_CLUB_TAG=club_tag
 # OCR_ENGINE: tesseract (по умолчанию), paddle или auto (PaddleOCR с fallback на Tesseract)
 OCR_ENGINE=tesseract
 TESSERACT_CMD=C:\\Program Files\\Tesseract-OCR\\tesseract.exe
+# Для PaddleOCR составные значения Tesseract вроде rus+eng автоматически приводятся к одному поддерживаемому языку.
+# CPU-ускорение oneDNN/MKLDNN отключается автоматически, чтобы обходить ошибку PaddlePaddle ConvertPirAttribute2RuntimeAttribute.
 OCR_LANG=rus+eng
 
 # Шаблоны (PNG) для поиска элементов по картинке (надежнее OCR для стилизованного текста/иконок)
@@ -72,7 +74,9 @@ COORD_FIRST_RESULT_Y=300
 COORD_BACK_HOME_X=1800
 COORD_BACK_HOME_Y=120
 
-# Область на экране, где читается ник и Supercell ID (left, top, width, height)
+# Области на экране (left, top, width, height):
+# ROI_MEMBER_LIST используется для поиска ника в списке клуба.
+# ROI_PLAYER_CARD используется как единственная область OCR при чтении Supercell ID из профиля.
 ROI_MEMBER_LIST=200,250,1400,750
 ROI_PLAYER_CARD=120,140,650,160
 ```
@@ -119,7 +123,7 @@ ROI_PLAYER_CARD=120,140,650,160
 Почему всё равно могут понадобиться координаты:
 - OCR по “кнопкам” в Brawl Stars иногда нестабилен из-за шрифтов/анимаций. Поэтому сейчас реализовано: **сначала OCR-попытка**, затем **fallback на координаты**.
 - Для стилизованных кнопок (например “КЛУБ”) лучше работает template matching по PNG-шаблону: задайте `TEMPLATE_CLUB_TAB` и положите файл (например) в `templates\\club.png`.
-- Поиск игрока на шаге `find_player` только открывает профиль: читает область `ROI_MEMBER_LIST`, группирует OCR-слова по строкам, сравнивает их с `--player-name`, при промахе повторяет OCR несколькими режимами/предобработками и прокручивает список циклически (вниз до конца, затем вверх и обратно) с ограничением по числу циклов. Считывание Supercell ID вынесено в шаг `read_supercell_id`: он ищет чёрную рамку ближе к левому верхнему углу в `ROI_PLAYER_CARD`, ждёт появления ID после открытия профиля и сохраняет регистр букв. При `OCR_ENGINE=paddle` используется PaddleOCR; при `OCR_ENGINE=auto` PaddleOCR пробуется первым, а Tesseract остаётся fallback.
+- Поиск игрока на шаге `find_player` только открывает профиль: читает область `ROI_MEMBER_LIST`, группирует OCR-слова по строкам, сравнивает их с `--player-name`, при промахе повторяет OCR несколькими режимами/предобработками и прокручивает список циклически (вниз до конца, затем вверх и обратно) с ограничением по числу циклов. Считывание Supercell ID вынесено в шаг `read_supercell_id`: OCR выполняется только внутри `ROI_PLAYER_CARD`; внутри этой области пробуются чёрная рамка ближе к левому верхнему углу, фиксированный верхне-левый фрагмент и вся область целиком. Шаг ждёт появления ID после открытия профиля и сохраняет регистр букв. При `OCR_ENGINE=paddle` используется PaddleOCR; при `OCR_ENGINE=auto` PaddleOCR пробуется первым, а Tesseract остаётся fallback.
 
 Про ввод `club_tag`:
 - Ввод `club_tag` в поле поиска клуба делается прямым набором физическими клавишами: скрипт сначала читает текущую раскладку окна и переключает её через `LAYOUT_SWITCH_HOTKEY` только если она не EN, затем вводит `#` как `Shift+3`, буквы — lowercase-клавишами, цифры — цифровыми клавишами. Прямое WinAPI-переключение раскладки не используется; если прямой набор недоступен, используется fallback через буфер обмена (`Ctrl+V`).

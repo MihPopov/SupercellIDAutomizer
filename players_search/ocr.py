@@ -185,6 +185,14 @@ def _walk_paddle_objects(obj: Any) -> Iterator[Any]:
         yield from _walk_paddle_objects(json_value)
 
 
+def _first_paddle_field(obj: Dict[str, Any], *names: str) -> Any:
+    for name in names:
+        value = obj.get(name)
+        if value is not None:
+            return value
+    return []
+
+
 def _box_from_paddle(value: Any) -> Optional[Tuple[int, int, int, int]]:
     arr = np.array(value)
     if arr.size == 4 and arr.ndim == 1:
@@ -209,8 +217,10 @@ def _paddle_texts_and_words(img: Image.Image, *, lang: str = "eng") -> Tuple[Lis
             if "rec_text" in obj and isinstance(obj["rec_text"], str):
                 texts.append(obj["rec_text"])
             rec_texts = obj.get("rec_texts")
-            if isinstance(rec_texts, list):
-                boxes = obj.get("rec_boxes") or obj.get("rec_polys") or obj.get("dt_polys") or []
+            if isinstance(rec_texts, np.ndarray):
+                rec_texts = rec_texts.tolist()
+            if isinstance(rec_texts, (list, tuple)):
+                boxes = _first_paddle_field(obj, "rec_boxes", "rec_polys", "dt_polys")
                 for i, text in enumerate(rec_texts):
                     if not isinstance(text, str) or not text.strip():
                         continue

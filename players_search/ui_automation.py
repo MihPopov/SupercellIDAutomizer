@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from difflib import SequenceMatcher
 from typing import Iterable, List, Optional, Tuple
 
@@ -289,8 +290,14 @@ class EmulatorUI:
         self._sleep()
 
     def _submit_search(self) -> None:
-        # In many emulators, Enter first closes the on-screen keyboard / commits input.
-        # Then we try to click the Search button via template; if it's not found, fall back to OCR; then Enter.
+        # Keep the historical behavior: click the configured Search button
+        # template first. Enter is only a fallback (or a way to close an
+        # on-screen keyboard before retrying template/OCR search).
+        if self.template_search_button and self.click_template(self.template_search_button, min_score=0.82):
+            return
+        if self.click_text("искать") or self.click_text("search"):
+            return
+
         self._ensure_emulator_active()
         pyautogui.press("enter")
         self._sleep()
@@ -327,15 +334,22 @@ class EmulatorUI:
         self._click((xw, yw))
         return True
 
+    def _resolve_template_path(self, template_path: str) -> Path:
+        path = Path(template_path).expanduser()
+        if path.is_absolute() or path.exists():
+            return path
+        repo_relative = Path(__file__).resolve().parent.parent / path
+        if repo_relative.exists():
+            return repo_relative
+        return path
+
     def click_template(self, template_path: str, *, min_score: float = 0.8) -> bool:
         """
         Template-matching click on the emulator window.
-        `template_path` can be absolute or relative to CWD.
+        `template_path` can be absolute or relative to CWD/repo root.
         """
-        from pathlib import Path
-
         img = self.screenshot_window()
-        match = find_template_best(img, template_path=Path(template_path), min_score=min_score)
+        match = find_template_best(img, template_path=self._resolve_template_path(template_path), min_score=min_score)
         if not match:
             return False
         xw, yw = match.center()
@@ -343,10 +357,8 @@ class EmulatorUI:
         return True
 
     def locate_template(self, template_path: str, *, min_score: float = 0.8):
-        from pathlib import Path
-
         img = self.screenshot_window()
-        return find_template_best(img, template_path=Path(template_path), min_score=min_score)
+        return find_template_best(img, template_path=self._resolve_template_path(template_path), min_score=min_score)
 
     def _scroll_member_list(self) -> None:
         # Drag inside the member-list ROI so Android emulators treat it as a
@@ -503,21 +515,22 @@ class EmulatorUI:
         bottom = min(img_h, y + h + pad)
         return img.crop((left, top, right, bottom))
 
+    def _supercell_id_ocr_candidates(self, card_img: Image.Image) -> List[Image.Image]:
+        """Build OCR candidates strictly inside ROI_PLAYER_CARD."""
+        id_img = self._crop_supercell_id_box(card_img)
+        anchor_crop = card_img.crop((0, 0, int(card_img.size[0] * 0.58), int(card_img.size[1] * 0.5)))
+        return [id_img, anchor_crop, card_img]
+
     def read_supercell_id_from_profile(self) -> Optional[str]:
-        """Read the case-sensitive Supercell ID from the profile nameplate."""
+        """Read the case-sensitive Supercell ID from ROI_PLAYER_CARD."""
         whitelist = "#ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
         deadline = time.time() + 4.0
         while time.time() < deadline:
+            # All OCR inputs are derived from ROI_PLAYER_CARD so calibration of
+            # that ROI directly controls where Supercell ID recognition looks.
             card_img = self._screenshot(self.roi_player_card)
-            id_img = self._crop_supercell_id_box(card_img)
 
-            # Try both dynamic crop and a fixed anchor near the top-left where
-            # the black nameplate is expected.
-            w, h = id_img.size
-            anchor_crop = card_img.crop((0, 0, int(card_img.size[0] * 0.58), int(card_img.size[1] * 0.5)))
-            candidates = [id_img, anchor_crop]
-
-            for candidate_img in candidates:
+            for candidate_img in self._supercell_id_ocr_candidates(card_img):
                 texts = image_to_text_variants(candidate_img, lang="eng", whitelist=whitelist, engine=self.ocr_engine)
                 texts.append(image_to_text(candidate_img, lang="eng", engine=self.ocr_engine))
                 for text in texts:

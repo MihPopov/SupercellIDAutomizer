@@ -60,16 +60,29 @@ def _load_dotenv_fallback(dotenv_path: Path) -> bool:
     return loaded
 
 
+def _dotenv_candidates() -> list[Path]:
+    cwd_dotenv = Path.cwd() / ".env"
+    repo_dotenv = Path(__file__).resolve().parent.parent / ".env"
+    candidates = [cwd_dotenv]
+    if repo_dotenv != cwd_dotenv:
+        candidates.append(repo_dotenv)
+    return candidates
+
+
 def load_dotenv_file() -> bool:
     """
-    Load .env from the current working directory.
+    Load .env from the current working directory, then from the repo root.
 
     Uses python-dotenv when it is installed, but falls back to a small parser so
     local UI/debug commands can still start and report useful errors before the
     user installs optional project dependencies.
     """
-    dotenv_path = Path.cwd() / ".env"
+    loaded = False
     if importlib.util.find_spec("dotenv") is not None:
         dotenv = importlib.import_module("dotenv")
-        return bool(dotenv.load_dotenv(dotenv_path=dotenv_path))
-    return _load_dotenv_fallback(dotenv_path)
+        for dotenv_path in _dotenv_candidates():
+            loaded = bool(dotenv.load_dotenv(dotenv_path=dotenv_path)) or loaded
+        return loaded
+    for dotenv_path in _dotenv_candidates():
+        loaded = _load_dotenv_fallback(dotenv_path) or loaded
+    return loaded

@@ -1,3 +1,5 @@
 # Optional OCR backend. Install in addition to requirements.txt to use OCR_ENGINE=paddle.
 paddleocr>=3.0.0
-# Install the appropriate PaddlePaddle runtime for your CPU/GPU from the official PaddlePaddle selector.
+# CPU runtime required by PaddleOCR. For GPU/CUDA setups, replace this with the
+# appropriate PaddlePaddle package from the official PaddlePaddle selector.
+paddlepaddle>=3.0.0

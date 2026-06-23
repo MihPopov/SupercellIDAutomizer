@@ -99,6 +99,23 @@ def _paddle_install_hint() -> str:
     )
 
 
+def _paddle_lang(lang: str) -> str:
+    """Convert Tesseract language codes to a single PaddleOCR language code."""
+    aliases = {
+        "eng": "en",
+        "en": "en",
+        "rus": "ru",
+        "ru": "ru",
+    }
+    parts = [part.strip().lower() for part in re.split(r"[+,]", lang or "") if part.strip()]
+    for preferred in ("eng", "en"):
+        if preferred in parts:
+            return aliases[preferred]
+    for part in parts:
+        return aliases.get(part, part)
+    return "en"
+
+
 def _ensure_paddle_available(engine: str) -> None:
     missing = _paddle_missing_packages()
     if engine in {"paddle", "paddleocr"} and missing:
@@ -113,7 +130,7 @@ def _paddle_ocr(lang: str):
     if _paddle_missing_packages():
         return None
     paddleocr = importlib.import_module("paddleocr")
-    paddle_lang = "en" if lang in {"eng", "en"} else lang
+    paddle_lang = _paddle_lang(lang)
     kwargs = {
         "lang": paddle_lang,
         "use_doc_orientation_classify": False,

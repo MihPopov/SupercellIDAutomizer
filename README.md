@@ -46,6 +46,7 @@ COL_CLUB_TAG=club_tag
 # OCR_ENGINE: tesseract (по умолчанию), paddle или auto (PaddleOCR с fallback на Tesseract)
 OCR_ENGINE=tesseract
 TESSERACT_CMD=C:\\Program Files\\Tesseract-OCR\\tesseract.exe
+# Для PaddleOCR составные значения Tesseract вроде rus+eng автоматически приводятся к одному поддерживаемому языку.
 OCR_LANG=rus+eng
 
 # Шаблоны (PNG) для поиска элементов по картинке (надежнее OCR для стилизованного текста/иконок)

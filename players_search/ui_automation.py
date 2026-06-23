@@ -290,11 +290,22 @@ class EmulatorUI:
         self._sleep()
 
     def _submit_search(self) -> None:
-        # Keep the historical behavior: click the configured Search button
-        # template first. Enter is only a fallback (or a way to close an
-        # on-screen keyboard before retrying template/OCR search).
-        if self.template_search_button and self.click_template(self.template_search_button, min_score=0.82):
+        # If TEMPLATE_SEARCH_BUTTON is configured, keep this step template-only
+        # so it does not unexpectedly start OCR/Paddle while submitting a club
+        # tag. Enter remains only a fallback/retry helper.
+        if self.template_search_button:
+            if self.click_template(self.template_search_button, min_score=0.82):
+                return
+            self._ensure_emulator_active()
+            pyautogui.press("enter")
+            self._sleep()
+            if self.click_template(self.template_search_button, min_score=0.82):
+                return
+            self._ensure_emulator_active()
+            pyautogui.press("enter")
+            self._sleep()
             return
+
         if self.click_text("искать") or self.click_text("search"):
             return
 
@@ -302,8 +313,6 @@ class EmulatorUI:
         pyautogui.press("enter")
         self._sleep()
 
-        if self.template_search_button and self.click_template(self.template_search_button, min_score=0.82):
-            return
         if self.click_text("искать") or self.click_text("search"):
             return
 

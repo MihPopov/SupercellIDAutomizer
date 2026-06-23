@@ -290,25 +290,9 @@ class EmulatorUI:
         self._sleep()
 
     def _submit_search(self) -> None:
-        # If TEMPLATE_SEARCH_BUTTON is configured, keep this step template-only
-        # so it does not unexpectedly start OCR/Paddle while submitting a club
-        # tag. Enter remains only a fallback/retry helper.
-        if self.template_search_button:
-            if self.click_template(self.template_search_button, min_score=0.82):
-                return
-            self._ensure_emulator_active()
-            pyautogui.press("enter")
-            self._sleep()
-            if self.click_template(self.template_search_button, min_score=0.82):
-                return
-            self._ensure_emulator_active()
-            pyautogui.press("enter")
-            self._sleep()
-            return
-
-        if self.click_text("искать") or self.click_text("search"):
-            return
-
+        # Original flow: Enter closes/commits the on-screen keyboard, then the
+        # configured Search button template is clicked. OCR is only a fallback
+        # after the template attempt.
         self._ensure_emulator_active()
         pyautogui.press("enter")
         self._sleep()
@@ -344,7 +328,8 @@ class EmulatorUI:
         return True
 
     def _resolve_template_path(self, template_path: str) -> Path:
-        path = Path(template_path).expanduser()
+        normalized = template_path.replace("\\", "/")
+        path = Path(normalized).expanduser()
         if path.is_absolute() or path.exists():
             return path
         repo_relative = Path(__file__).resolve().parent.parent / path

@@ -27,11 +27,15 @@ def debug_env() -> None:
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     ocr_engine = os.getenv("OCR_ENGINE")
+    table = os.getenv("SUPABASE_TABLE") or "selected_players"
+    effective_table = "selected_players" if table == "players_in_progress" else table
 
     print(f"SUPABASE_URL: {_mask(url)}")
     if url:
         print(f"  raw prefix: {url.strip()[:32]}")
     print(f"SUPABASE_SERVICE_ROLE_KEY: {_mask(key)}")
+    print(f"SUPABASE_TABLE: {table}")
+    print(f"SUPABASE_TABLE effective: {effective_table}")
     print(f"OCR_ENGINE: {ocr_engine or 'tesseract'}")
     if key:
         print(f"  key startswith 'eyJ': {key.strip().startswith('eyJ')}")

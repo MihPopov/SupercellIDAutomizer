@@ -81,20 +81,20 @@ def _create_ui(settings: Settings, ui_sleep: float):
 
 def run_fill(*, settings: Settings, limit: int, dry_run: bool, ui_sleep: float) -> None:
     from players_search.ocr import configure_ocr_engine, configure_tesseract
-    from players_search.supabase_repo import PlayersInProgressRepo
+    from players_search.supabase_repo import SelectedPlayersRepo
 
     configure_tesseract(settings.tesseract_cmd)
     configure_ocr_engine(settings.ocr_engine)
-    repo = PlayersInProgressRepo(settings)
+    repo = SelectedPlayersRepo(settings)
     ui = _create_ui(settings, ui_sleep=ui_sleep)
 
     rows = repo.fetch_missing_supercell_id(limit=limit)
     if not rows:
-        print("No rows found with missing supercell_id (and existing club_tag).")
+        print("No rows found with missing supercell_id (and existing tag/club_tag).")
         return
 
     for row in rows:
-        print(f"Processing: id={row.row_id} name={row.name!r} club_tag={row.club_tag!r}")
+        print(f"Processing: tag={row.tag!r} name={row.name!r} club_tag={row.club_tag!r}")
         try:
             ui.search_club_by_tag(row.club_tag)
             ui.open_first_club_result()
@@ -114,7 +114,7 @@ def run_fill(*, settings: Settings, limit: int, dry_run: bool, ui_sleep: float) 
             print(f"  -> Found supercell_id={scid}")
             if dry_run:
                 continue
-            repo.set_supercell_id(row.row_id, scid)
+            repo.set_supercell_id(row.tag, scid)
         except KeyboardInterrupt:
             raise
         except Exception as e:  # noqa: BLE001

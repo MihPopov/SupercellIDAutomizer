@@ -81,11 +81,11 @@ def _create_ui(settings: Settings, ui_sleep: float):
 
 def run_fill(*, settings: Settings, limit: int, dry_run: bool, ui_sleep: float) -> None:
     from players_search.ocr import configure_ocr_engine, configure_tesseract
-    from players_search.supabase_repo import PlayersInProgressRepo
+    from players_search.supabase_repo import SelectedPlayersRepo
 
     configure_tesseract(settings.tesseract_cmd)
     configure_ocr_engine(settings.ocr_engine)
-    repo = PlayersInProgressRepo(settings)
+    repo = SelectedPlayersRepo(settings)
     ui = _create_ui(settings, ui_sleep=ui_sleep)
 
     rows = repo.fetch_missing_supercell_id(limit=limit)

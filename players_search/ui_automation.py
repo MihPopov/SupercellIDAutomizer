@@ -196,6 +196,7 @@ class EmulatorUI:
     def _type_and_submit(self, text: str) -> None:
         self._ensure_emulator_active()
         self._clear_and_input(text)
+        self._close_keyboard_after_input()
         self._submit_search()
 
     def _sanitize_input(self, text: str) -> str:
@@ -290,12 +291,11 @@ class EmulatorUI:
         self._sleep()
 
     def _submit_search(self) -> None:
-        # Original flow: Enter closes/commits the on-screen keyboard, then the
-        # configured Search button template is clicked. OCR is only a fallback
-        # after the template attempt.
-        self._ensure_emulator_active()
-        pyautogui.press("enter")
-        self._sleep()
+        # Keyboard closing is handled before this method. Once the Search button
+        # is visible, prefer the configured image template and use OCR only as a
+        # fallback when the template is absent or not found.
+        if self.template_search_button and self.click_template(self.template_search_button, min_score=0.82):
+            return
 
         if self.click_text("искать") or self.click_text("search"):
             return

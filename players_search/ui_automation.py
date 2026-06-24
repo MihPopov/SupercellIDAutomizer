@@ -314,6 +314,10 @@ class EmulatorUI:
         r = self.window.rect()
         return pyautogui.screenshot(region=(r.left, r.top, r.width, r.height))
 
+    def screenshot_player_card_roi(self) -> Image.Image:
+        """Screenshot the exact ROI_PLAYER_CARD area used for Supercell ID OCR."""
+        return self._screenshot(self.roi_player_card)
+
     def click_text(self, text: str) -> bool:
         """
         OCR-based click: takes a full window screenshot, finds a token containing `text`,

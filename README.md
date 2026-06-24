@@ -114,6 +114,8 @@ ROI_PLAYER_CARD=120,140,650,160
 - Проверка поиска элемента по картинке (template matching):
   - `python -m players_search probe-template --template templates\\club.png`
   - `python -m players_search probe-template --template templates\\club.png --click`
+- Сохранение области профиля, которую OCR использует для чтения Supercell ID:
+  - `python -m players_search dump-player-card-roi --out debug_vision\\player_card_roi.png` (сохранит точную область `ROI_PLAYER_CARD`, используемую на шаге `read_supercell_id`)
 
 ## Важно
 

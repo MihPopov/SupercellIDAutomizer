@@ -69,7 +69,7 @@ def load_settings() -> Settings:
     return Settings(
         supabase_url=supabase_url,
         supabase_service_role_key=supabase_key,
-        supabase_table=_env("SUPABASE_TABLE", "players_in_progress") or "players_in_progress",
+        supabase_table=_env("SUPABASE_TABLE", "selected_players") or "selected_players",
         col_id=_env("COL_ID", "id") or "id",
         col_name=_env("COL_NAME", "name") or "name",
         col_supercell_id=_env("COL_SUPERCELL_ID", "supercell_id") or "supercell_id",

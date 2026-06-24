@@ -1,10 +1,10 @@
 # PlayersSearchProject
 
-Скрипт заполняет `supercell_id` в таблице Supabase `players_in_progress`, находя Supercell ID игроков в эмуляторе Brawl Stars на ПК.
+Скрипт заполняет `supercell_id` в таблице Supabase `selected_players`, находя Supercell ID игроков в эмуляторе Brawl Stars на ПК.
 
 ## Алгоритм (как в ТЗ)
 
-1. Берём из Supabase `players_in_progress` строки, где `supercell_id IS NULL`.
+1. Берём из Supabase `selected_players` строки, где `supercell_id IS NULL`.
 2. Для каждой строки:
    - Открываем вкладку **Клуб**.
    - Вставляем `club_tag` игрока в поиск клуба.
@@ -34,7 +34,7 @@
 ```env
 SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
-SUPABASE_TABLE=players_in_progress
+SUPABASE_TABLE=selected_players
 
 # Названия колонок в таблице (если у вас отличаются)
 COL_ID=id
@@ -114,6 +114,8 @@ ROI_PLAYER_CARD=120,140,650,160
 - Проверка поиска элемента по картинке (template matching):
   - `python -m players_search probe-template --template templates\\club.png`
   - `python -m players_search probe-template --template templates\\club.png --click`
+- Сохранение области профиля, которую OCR использует для чтения Supercell ID:
+  - `python -m players_search dump-player-card-roi --out debug_vision\\player_card_roi.png` (сохранит точную область `ROI_PLAYER_CARD`, используемую на шаге `read_supercell_id`)
 
 ## Важно
 

@@ -75,6 +75,10 @@ def main() -> int:
     p_tpl.add_argument("--click", action="store_true")
     p_tpl.add_argument("--sleep", type=float, default=0.6)
 
+    p_card = sub.add_parser("dump-player-card-roi", help="Save the ROI_PLAYER_CARD image used for Supercell ID OCR")
+    p_card.add_argument("--out", default="debug_vision/player_card_roi.png", help="Output PNG path")
+    p_card.add_argument("--sleep", type=float, default=0.6)
+
     args = parser.parse_args()
 
     if args.cmd == "calibrate":
@@ -148,6 +152,14 @@ def main() -> int:
         if args.click:
             ui.click_template(args.template, min_score=args.min_score)
             print("clicked=True")
+        return 0
+
+    if args.cmd == "dump-player-card-roi":
+        ui = _build_ui(ui_sleep=args.sleep)
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        ui.screenshot_player_card_roi().save(out_path)
+        print(out_path)
         return 0
 
     if args.cmd == "run":

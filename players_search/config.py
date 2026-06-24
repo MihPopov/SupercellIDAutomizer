@@ -43,7 +43,7 @@ class Settings:
     supabase_url: str
     supabase_service_role_key: str
     supabase_table: str
-    col_id: str
+    col_tag: str
     col_name: str
     col_supercell_id: str
     col_club_tag: str
@@ -77,7 +77,7 @@ def load_settings() -> Settings:
         supabase_url=supabase_url,
         supabase_service_role_key=supabase_key,
         supabase_table=_supabase_table(),
-        col_id=_env("COL_ID", "id") or "id",
+        col_tag=_env("COL_TAG", "tag") or "tag",
         col_name=_env("COL_NAME", "name") or "name",
         col_supercell_id=_env("COL_SUPERCELL_ID", "supercell_id") or "supercell_id",
         col_club_tag=_env("COL_CLUB_TAG", "club_tag") or "club_tag",

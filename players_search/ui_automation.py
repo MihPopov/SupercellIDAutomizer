@@ -358,6 +358,12 @@ class EmulatorUI:
         img = self.screenshot_window()
         return find_template_best(img, template_path=self._resolve_template_path(template_path), min_score=min_score)
 
+    def _member_list_action_x(self, width: int) -> int:
+        # Use the right side of member rows for scrolling/clicking. At the
+        # calibrated 1808x1032 window size, OCR text is left of the clickable
+        # player card body, so text-center clicks can miss the row.
+        return int(width * 0.72)
+
     def _scroll_member_list(self) -> None:
         # Drag inside the member-list ROI so Android emulators treat it as a
         # touch scroll. This is more reliable than wheel scrolling, and it also
@@ -365,7 +371,7 @@ class EmulatorUI:
         # arbitrary mouse position.
         self._ensure_emulator_active()
         left, top, width, height = self.window.to_screen_roi(self.roi_member_list)
-        x = left + width // 2
+        x = left + self._member_list_action_x(width)
         start_y = top + int(height * 0.82)
         end_y = top + int(height * 0.28)
         pyautogui.moveTo(x, start_y)
@@ -376,7 +382,7 @@ class EmulatorUI:
         # Reverse drag to move the list up (towards the beginning/top).
         self._ensure_emulator_active()
         left, top, width, height = self.window.to_screen_roi(self.roi_member_list)
-        x = left + width // 2
+        x = left + self._member_list_action_x(width)
         start_y = top + int(height * 0.28)
         end_y = top + int(height * 0.82)
         pyautogui.moveTo(x, start_y)
@@ -456,8 +462,9 @@ class EmulatorUI:
                 words = image_to_words_variants(list_img, lang=self.ocr_lang, engine=self.ocr_engine)
                 match = _find_player_match(words, player_name)
             if match:
-                left0, top0, _, _ = self.roi_member_list
-                x, y = match.line.center()
+                left0, top0, width0, _ = self.roi_member_list
+                _, y = match.line.center()
+                x = self._member_list_action_x(width0)
                 self._click((left0 + x, top0 + y))
                 self._sleep()
                 return True

@@ -35,6 +35,7 @@
 SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
 SUPABASE_TABLE=selected_players
+# Старое значение players_in_progress автоматически заменяется на selected_players.
 
 # Названия колонок в таблице (если у вас отличаются)
 COL_ID=id
@@ -95,8 +96,8 @@ ROI_PLAYER_CARD=120,140,650,160
 - Калибровка координат (печатает текущие координаты курсора раз в 0.5с):
   - `python -m players_search calibrate`
 - Зафиксировать/проверить размер окна эмулятора (для стабильных ROI/COORD):
-  - `python -m players_search lock-window --width 1920 --height 1080`
-  - `python -m players_search lock-window --width 1920 --height 1080 --strict`
+  - `python -m players_search lock-window --width 1808 --height 1032`
+  - `python -m players_search lock-window --width 1808 --height 1032 --strict`
 - Если не знаете заголовок окна эмулятора:
   - `python -m players_search list-windows`
 - Пошаговая проверка отдельных действий:

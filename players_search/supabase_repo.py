@@ -16,7 +16,7 @@ class PlayerRow:
     row_id: Any
 
 
-class PlayersInProgressRepo:
+class SelectedPlayersRepo:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._client: Client = create_client(settings.supabase_url, settings.supabase_service_role_key)

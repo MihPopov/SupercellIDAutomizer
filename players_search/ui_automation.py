@@ -196,6 +196,7 @@ class EmulatorUI:
     def _type_and_submit(self, text: str) -> None:
         self._ensure_emulator_active()
         self._clear_and_input(text)
+        self._close_keyboard_after_input()
         self._submit_search()
 
     def _sanitize_input(self, text: str) -> str:
@@ -290,12 +291,11 @@ class EmulatorUI:
         self._sleep()
 
     def _submit_search(self) -> None:
-        # Original flow: Enter closes/commits the on-screen keyboard, then the
-        # configured Search button template is clicked. OCR is only a fallback
-        # after the template attempt.
-        self._ensure_emulator_active()
-        pyautogui.press("enter")
-        self._sleep()
+        # Keyboard closing is handled before this method. Once the Search button
+        # is visible, prefer the configured image template and use OCR only as a
+        # fallback when the template is absent or not found.
+        if self.template_search_button and self.click_template(self.template_search_button, min_score=0.82):
+            return
 
         if self.click_text("искать") or self.click_text("search"):
             return
@@ -313,6 +313,10 @@ class EmulatorUI:
         self._ensure_emulator_active()
         r = self.window.rect()
         return pyautogui.screenshot(region=(r.left, r.top, r.width, r.height))
+
+    def screenshot_player_card_roi(self) -> Image.Image:
+        """Screenshot the exact ROI_PLAYER_CARD area used for Supercell ID OCR."""
+        return self._screenshot(self.roi_player_card)
 
     def click_text(self, text: str) -> bool:
         """
@@ -354,6 +358,12 @@ class EmulatorUI:
         img = self.screenshot_window()
         return find_template_best(img, template_path=self._resolve_template_path(template_path), min_score=min_score)
 
+    def _member_list_action_x(self, width: int) -> int:
+        # Use the right side of member rows for scrolling/clicking. At the
+        # calibrated 1808x1032 window size, OCR text is left of the clickable
+        # player card body, so text-center clicks can miss the row.
+        return int(width * 0.72)
+
     def _scroll_member_list(self) -> None:
         # Drag inside the member-list ROI so Android emulators treat it as a
         # touch scroll. This is more reliable than wheel scrolling, and it also
@@ -361,7 +371,7 @@ class EmulatorUI:
         # arbitrary mouse position.
         self._ensure_emulator_active()
         left, top, width, height = self.window.to_screen_roi(self.roi_member_list)
-        x = left + width // 2
+        x = left + self._member_list_action_x(width)
         start_y = top + int(height * 0.82)
         end_y = top + int(height * 0.28)
         pyautogui.moveTo(x, start_y)
@@ -372,7 +382,7 @@ class EmulatorUI:
         # Reverse drag to move the list up (towards the beginning/top).
         self._ensure_emulator_active()
         left, top, width, height = self.window.to_screen_roi(self.roi_member_list)
-        x = left + width // 2
+        x = left + self._member_list_action_x(width)
         start_y = top + int(height * 0.28)
         end_y = top + int(height * 0.82)
         pyautogui.moveTo(x, start_y)
@@ -452,8 +462,9 @@ class EmulatorUI:
                 words = image_to_words_variants(list_img, lang=self.ocr_lang, engine=self.ocr_engine)
                 match = _find_player_match(words, player_name)
             if match:
-                left0, top0, _, _ = self.roi_member_list
-                x, y = match.line.center()
+                left0, top0, width0, _ = self.roi_member_list
+                _, y = match.line.center()
+                x = self._member_list_action_x(width0)
                 self._click((left0 + x, top0 + y))
                 self._sleep()
                 return True

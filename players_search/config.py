@@ -31,6 +31,13 @@ def _env_roi(name: str, default: Tuple[int, int, int, int]) -> Tuple[int, int, i
     return (int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3]))
 
 
+def _supabase_table() -> str:
+    table = _env("SUPABASE_TABLE", "selected_players") or "selected_players"
+    if table == "players_in_progress":
+        return "selected_players"
+    return table
+
+
 @dataclass(frozen=True)
 class Settings:
     supabase_url: str
@@ -69,7 +76,7 @@ def load_settings() -> Settings:
     return Settings(
         supabase_url=supabase_url,
         supabase_service_role_key=supabase_key,
-        supabase_table=_env("SUPABASE_TABLE", "players_in_progress") or "players_in_progress",
+        supabase_table=_supabase_table(),
         col_id=_env("COL_ID", "id") or "id",
         col_name=_env("COL_NAME", "name") or "name",
         col_supercell_id=_env("COL_SUPERCELL_ID", "supercell_id") or "supercell_id",
